@@ -47,7 +47,8 @@ public class SearchView extends JFrame {
         driveCheckBoxes = new JCheckBox[roots.length];
         for (int i = 0; i < roots.length; i++) {
             driveCheckBoxes[i] = new JCheckBox(roots[i].getPath());
-            driveCheckBoxes[i].setSelected(true);
+            driveCheckBoxes[i].setSelected(false); // Standard: kein Laufwerk ausgewählt
+            driveCheckBoxes[i].addActionListener(e -> updateFolderFieldState());
             drivePanel.add(driveCheckBoxes[i]);
         }
 
@@ -111,6 +112,7 @@ public class SearchView extends JFrame {
         });
 
         updateButtons(false);
+        updateFolderFieldState();
     }
 
     private void bindModel() {
@@ -148,6 +150,21 @@ public class SearchView extends JFrame {
         folderField.setEnabled(!running);
         queryField.setEnabled(!running);
         browseButton.setEnabled(!running);
+    }
+
+    private void updateFolderFieldState() {
+        boolean anyDriveSelected = false;
+        if (driveCheckBoxes != null) {
+            for (JCheckBox cb : driveCheckBoxes) {
+                if (cb.isSelected()) {
+                    anyDriveSelected = true;
+                    break;
+                }
+            }
+        }
+        folderField.setEnabled(!anyDriveSelected);
+        browseButton.setEnabled(!anyDriveSelected);
+        // Der Text im Feld bleibt erhalten, wird aber gesperrt, wenn ein Laufwerk ausgewählt ist
     }
 
     private void onBrowse() {
@@ -188,15 +205,20 @@ public class SearchView extends JFrame {
     }
 
     private void onSearch() {
+        java.util.List<String> selectedDrives = getSelectedDrives();
         String folder = folderField.getText();
         String q = queryField.getText();
-        java.util.List<String> selectedDrives = getSelectedDrives();
-        if (selectedDrives.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Bitte mindestens ein Laufwerk auswählen.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+        if (!selectedDrives.isEmpty()) {
+            if (q == null || q.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Bitte einen Suchtext angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            controller.startSearch("", q.trim(), selectedDrives);
             return;
         }
+        // Kein Laufwerk ausgewählt, Ordner muss angegeben werden
         if (folder == null || folder.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Bitte einen Startordner angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Bitte einen Startordner angeben oder ein Laufwerk auswählen.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
         if (q == null || q.trim().isEmpty()) {
