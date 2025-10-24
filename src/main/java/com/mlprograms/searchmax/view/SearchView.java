@@ -24,6 +24,10 @@ public class SearchView extends JFrame {
     private final JLabel statusLabel = new JLabel("Bereit");
     private final JLabel idLabel = new JLabel("-");
 
+    // Timer und Zähler für die Punkt-Animation ("Suche läuft...")
+    private javax.swing.Timer dotTimer;
+    private int dotCount = 0;
+
     private JPanel drivePanel;
     private JCheckBox[] driveCheckBoxes;
 
@@ -77,6 +81,12 @@ public class SearchView extends JFrame {
         JPanel info = new JPanel(new FlowLayout(FlowLayout.LEFT));
         info.add(new JLabel("Status: "));
         info.add(statusLabel);
+        // Damit das nachfolgende Label (z. B. "Id:") beim Animieren der Punkte nicht verschoben wird,
+        // reservieren wir die maximale benötigte Breite für den Status-Text "Suche läuft...".
+        FontMetrics fm = statusLabel.getFontMetrics(statusLabel.getFont());
+        int prefW = fm.stringWidth("Suche läuft...");
+        int prefH = fm.getHeight();
+        statusLabel.setPreferredSize(new Dimension(prefW, prefH));
         info.add(Box.createHorizontalStrut(16));
         info.add(new JLabel("Id: "));
         info.add(idLabel);
@@ -131,8 +141,17 @@ public class SearchView extends JFrame {
                         break;
                     case SearchModel.PROP_STATUS:
                         SwingUtilities.invokeLater(() -> {
-                            statusLabel.setText((String) evt.getNewValue());
-                            boolean running = "Suche läuft...".equals(evt.getNewValue());
+                            String newStatus = (String) evt.getNewValue();
+                            boolean running = "Suche läuft...".equals(newStatus);
+                            // Wenn Suche läuft, Animation starten; sonst Animation stoppen und echten Status setzen
+                            if (running) {
+                                // Basistext ohne Punkte setzen und Animation starten
+                                statusLabel.setText("Suche läuft");
+                                startDotAnimation();
+                            } else {
+                                stopDotAnimation();
+                                statusLabel.setText(newStatus);
+                            }
                             updateButtons(running);
                         });
                         break;
@@ -142,6 +161,29 @@ public class SearchView extends JFrame {
                 }
             }
         });
+    }
+
+    // Startet die Punkt-Animation (0..3 Punkte, zyklisch)
+    private void startDotAnimation() {
+        if (dotTimer == null) {
+            dotTimer = new javax.swing.Timer(500, e -> {
+                dotCount = (dotCount + 1) % 4; // 0..3
+                StringBuilder dots = new StringBuilder();
+                for (int i = 0; i < dotCount; i++) dots.append('.');
+                statusLabel.setText("Suche läuft" + dots.toString());
+            });
+            dotTimer.setInitialDelay(0);
+        }
+        dotCount = 0;
+        dotTimer.start();
+    }
+
+    // Stoppt die Punkt-Animation und setzt den Zähler zurück
+    private void stopDotAnimation() {
+        if (dotTimer != null && dotTimer.isRunning()) {
+            dotTimer.stop();
+        }
+        dotCount = 0;
     }
 
     private void updateButtons(boolean running) {
