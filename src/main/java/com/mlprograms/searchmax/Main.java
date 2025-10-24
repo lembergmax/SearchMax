@@ -6,20 +6,22 @@ import com.mlprograms.searchmax.service.SearchService;
 import com.mlprograms.searchmax.view.SearchView;
 
 import javax.swing.*;
+
 public class Main {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            } catch (Exception ignored) {
+            } catch (final Exception exception) {
+                System.err.println(exception.getMessage());
             }
 
-            SearchService service = new SearchService();
-            SearchModel model = new SearchModel();
-            SearchController controller = new SearchController(service, model);
-            SearchView view = new SearchView(controller, model);
-            view.setVisible(true);
+            final SearchService searchService = new SearchService();
+            final SearchModel searchModel = new SearchModel();
+            final SearchController searchController = new SearchController(searchService, searchModel);
+            final SearchView searchView = new SearchView(searchController, searchModel);
+            searchView.setVisible(true);
         });
     }
 
