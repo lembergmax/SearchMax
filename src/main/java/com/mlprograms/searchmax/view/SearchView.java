@@ -2,24 +2,12 @@ package com.mlprograms.searchmax.view;
 
 import com.mlprograms.searchmax.controller.SearchController;
 import com.mlprograms.searchmax.model.SearchModel;
-import com.sun.jna.Native;
-import com.sun.jna.Pointer;
-import com.sun.jna.platform.win32.Ole32;
-import com.sun.jna.platform.win32.Shell32;
-import com.sun.jna.platform.win32.ShellAPI;
-import com.sun.jna.platform.win32.ShlObj;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.concurrent.TimeUnit;
 
 public class SearchView extends JFrame {
 
