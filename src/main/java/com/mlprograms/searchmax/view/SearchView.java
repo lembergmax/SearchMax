@@ -81,12 +81,10 @@ public class SearchView extends JFrame {
         JPanel info = new JPanel(new FlowLayout(FlowLayout.LEFT));
         info.add(new JLabel("Status: "));
         info.add(statusLabel);
-        // Damit das nachfolgende Label (z. B. "Id:") beim Animieren der Punkte nicht verschoben wird,
-        // reservieren wir die maximale benötigte Breite für den Status-Text "Suche läuft...".
-        FontMetrics fm = statusLabel.getFontMetrics(statusLabel.getFont());
-        int prefW = fm.stringWidth("Suche läuft...");
-        int prefH = fm.getHeight();
-        statusLabel.setPreferredSize(new Dimension(prefW, prefH));
+        // Hinweis: die PreferredSize für statusLabel wird nur beim Start der Punkt-Animation gesetzt,
+        // damit beim Animieren der Punkte der nachfolgende Text nicht verschoben wird.
+        // Wenn ein anderer (längerer/andere) Status gesetzt wird, wird die PreferredSize wieder entfernt
+        // und das Layout verhält sich normal.
         info.add(Box.createHorizontalStrut(16));
         info.add(new JLabel("Id: "));
         info.add(idLabel);
@@ -174,6 +172,16 @@ public class SearchView extends JFrame {
             });
             dotTimer.setInitialDelay(0);
         }
+        // Reserviere die Breite für den Text "Suche läuft...", damit beim Animieren die Breite konstant bleibt
+        FontMetrics fm = statusLabel.getFontMetrics(statusLabel.getFont());
+        int prefW = fm.stringWidth("Suche läuft...");
+        int prefH = fm.getHeight();
+        statusLabel.setPreferredSize(new Dimension(prefW, prefH));
+        statusLabel.revalidate();
+        if (statusLabel.getParent() != null) {
+            statusLabel.getParent().revalidate();
+            statusLabel.getParent().repaint();
+        }
         dotCount = 0;
         dotTimer.start();
     }
@@ -184,6 +192,13 @@ public class SearchView extends JFrame {
             dotTimer.stop();
         }
         dotCount = 0;
+        // Entferne die feste PreferredSize wieder, damit andere Statustexte das Layout normal beeinflussen
+        statusLabel.setPreferredSize(null);
+        statusLabel.revalidate();
+        if (statusLabel.getParent() != null) {
+            statusLabel.getParent().revalidate();
+            statusLabel.getParent().repaint();
+        }
     }
 
     private void updateButtons(boolean running) {
