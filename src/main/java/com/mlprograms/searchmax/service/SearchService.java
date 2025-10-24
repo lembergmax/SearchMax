@@ -27,34 +27,34 @@ public final class SearchService {
         this.pool = new ForkJoinPool(Math.max(1, Runtime.getRuntime().availableProcessors()));
     }
 
-    public void search(final String folderPath, final String queryText, final List<String> drives, final SearchEventListener listener) {
+    public void search(final String folderPath, final String queryText, final List<String> drives, final SearchEventListener listener, final boolean caseSensitive) {
         if (listener == null) {
             throw new IllegalArgumentException("listener darf nicht null sein");
         }
         if (drives != null && !drives.isEmpty()) {
-            handleSearchSelectedDrives(drives, queryText, listener);
+            handleSearchSelectedDrives(drives, queryText, listener, caseSensitive);
             return;
         }
 
         if (folderPath != null) {
             final String trimmed = folderPath.trim();
             if (trimmed.length() == 1 && Character.isLetter(trimmed.charAt(0))) {
-                handleSearchSelectedDrives(trimmed, queryText, listener);
+                handleSearchSelectedDrives(trimmed, queryText, listener, caseSensitive);
                 return;
             }
         }
 
         if ("*".equals(folderPath)) {
-            handleSearchAllDrives(queryText, listener);
+            handleSearchAllDrives(queryText, listener, caseSensitive);
             return;
         }
 
         if (isDriveList(folderPath)) {
-            handleSearchSelectedDrives(folderPath, queryText, listener);
+            handleSearchSelectedDrives(folderPath, queryText, listener, caseSensitive);
             return;
         }
 
-        startSearch(folderPath, queryText, listener);
+        startSearch(folderPath, queryText, listener, caseSensitive);
     }
 
     public boolean cancel(String searchId) {
@@ -115,7 +115,7 @@ public final class SearchService {
         return true;
     }
 
-    private void handleSearchAllDrives(final String queryText, final SearchEventListener listener) {
+    private void handleSearchAllDrives(final String queryText, final SearchEventListener listener, final boolean caseSensitive) {
         final File[] roots = File.listRoots();
         if (roots == null || roots.length == 0) {
             listener.onError("Keine Laufwerke gefunden");
@@ -132,7 +132,7 @@ public final class SearchService {
         for (final File root : roots) {
             final Path rootPath = root.toPath();
             if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener);
+                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener, caseSensitive);
             } else {
                 sharedHandle.getRemainingTasks().decrementAndGet();
             }
@@ -146,7 +146,7 @@ public final class SearchService {
         }
     }
 
-    private void handleSearchSelectedDrives(final String folderPathList, final String queryText, final SearchEventListener listener) {
+    private void handleSearchSelectedDrives(final String folderPathList, final String queryText, final SearchEventListener listener, final boolean caseSensitive) {
         final String[] tokens = folderPathList.split(",");
         if (tokens.length == 0) {
             listener.onError("Keine Laufwerke angegeben");
@@ -176,7 +176,7 @@ public final class SearchService {
 
             final Path rootPath = Paths.get(normalized);
             if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener);
+                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener, caseSensitive);
             } else {
                 sharedHandle.getRemainingTasks().decrementAndGet();
             }
@@ -191,7 +191,7 @@ public final class SearchService {
     }
 
     // Neue Methode für die Suche in ausgewählten Laufwerken
-    private void handleSearchSelectedDrives(List<String> drives, String queryText, SearchEventListener listener) {
+    private void handleSearchSelectedDrives(List<String> drives, String queryText, SearchEventListener listener, boolean caseSensitive) {
         if (drives == null || drives.isEmpty()) {
             listener.onError("Keine Laufwerke angegeben");
             return;
@@ -220,7 +220,7 @@ public final class SearchService {
 
             final Path rootPath = Paths.get(normalized);
             if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener);
+                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener, caseSensitive);
             } else {
                 sharedHandle.getRemainingTasks().decrementAndGet();
             }
@@ -234,7 +234,7 @@ public final class SearchService {
         }
     }
 
-    private void startSearch(final String folderPath, final String queryText, final SearchEventListener listener) {
+    private void startSearch(final String folderPath, final String queryText, final SearchEventListener listener, final boolean caseSensitive) {
         if (folderPath == null || queryText == null || queryText.isEmpty()) {
             listener.onError("Ungültige Anfrage");
             return;
@@ -253,14 +253,14 @@ public final class SearchService {
         final SearchHandle handle = createSearchHandle(startNano, 1);
         searches.put(searchId, handle);
 
-        startSearchTask(searchId, startPath, queryText, handle, listener);
+        startSearchTask(searchId, startPath, queryText, handle, listener, caseSensitive);
     }
 
     private SearchHandle createSearchHandle(long startNano, int remainingTasks) {
         return new SearchHandle(null, startNano, new AtomicInteger(remainingTasks), new AtomicInteger(0), new ConcurrentLinkedQueue<>());
     }
 
-    private void startSearchTask(final String id, final Path startPath, final String queryText, final SearchHandle searchHandle, final SearchEventListener listener) {
+    private void startSearchTask(final String id, final Path startPath, final String queryText, final SearchHandle searchHandle, final SearchEventListener listener, final boolean caseSensitive) {
         final Collection<String> results = (searchHandle.getResults() != null) ? searchHandle.getResults() : new ConcurrentLinkedQueue<>();
         final AtomicInteger matchCount = (searchHandle.getMatchCount() != null) ? searchHandle.getMatchCount() : new AtomicInteger(0);
 
@@ -268,7 +268,7 @@ public final class SearchService {
 
         ForkJoinTask<?> submitted = pool.submit(() -> {
             try {
-                pool.invoke(new DirectoryTask(startPath, results, matchCount, queryText, searchHandle.getStartNano(), onMatch, searchHandle.getCancelled()));
+                pool.invoke(new DirectoryTask(startPath, results, matchCount, queryText, searchHandle.getStartNano(), onMatch, searchHandle.getCancelled(), caseSensitive));
             } catch (Throwable t) {
                 LOGGER.log(Level.SEVERE, "Suche fehlgeschlagen (id=" + id + ")", t);
                 safeSendError(listener, "Suche fehlgeschlagen: " + t.getMessage());

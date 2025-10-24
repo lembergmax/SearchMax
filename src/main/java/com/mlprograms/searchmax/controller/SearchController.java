@@ -17,11 +17,11 @@ public class SearchController implements SearchEventListener {
         this.model = model;
     }
 
-    public void startSearch(String folder, String query, List<String> drives) {
+    public void startSearch(String folder, String query, List<String> drives, boolean caseSensitive) {
         model.clearResults();
         model.setStatus("Suche läuft...");
         model.setId(null);
-        service.search(folder, query, drives, this);
+        service.search(folder, query, drives, this, caseSensitive);
     }
 
     public boolean cancelSearch() {

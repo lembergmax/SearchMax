@@ -17,6 +17,7 @@ public class SearchView extends JFrame {
     private final JTextField folderField = new JTextField(30);
     private final JButton browseButton = new JButton("Durchsuchen...");
     private final JTextField queryField = new JTextField(20);
+    private final JCheckBox caseSensitiveCheck = new JCheckBox("Groß-/Kleinschreibung beachten");
     private final JButton searchButton = new JButton("Suche");
     private final JButton cancelButton = new JButton("Abbrechen");
     private final DefaultListModel<String> listModel = new DefaultListModel<>();
@@ -70,7 +71,7 @@ public class SearchView extends JFrame {
         c.gridwidth = 1;
         c.gridx = 0; c.gridy = 2; top.add(new JLabel("Suchtext"), c);
         c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(queryField, c);
-        c.gridx = 2; c.fill = GridBagConstraints.NONE; JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT)); btnPanel.add(searchButton); btnPanel.add(cancelButton); top.add(btnPanel, c);
+        c.gridx = 2; c.fill = GridBagConstraints.NONE; JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT)); btnPanel.add(caseSensitiveCheck); btnPanel.add(searchButton); btnPanel.add(cancelButton); top.add(btnPanel, c);
 
         JPanel center = new JPanel(new BorderLayout());
         resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -265,12 +266,13 @@ public class SearchView extends JFrame {
         java.util.List<String> selectedDrives = getSelectedDrives();
         String folder = folderField.getText();
         String q = queryField.getText();
+        boolean caseSensitive = caseSensitiveCheck.isSelected();
         if (!selectedDrives.isEmpty()) {
             if (q == null || q.trim().isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Bitte einen Suchtext angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            controller.startSearch("", q.trim(), selectedDrives);
+            controller.startSearch("", q.trim(), selectedDrives, caseSensitive);
             return;
         }
         // Kein Laufwerk ausgewählt, Ordner muss angegeben werden
@@ -282,7 +284,7 @@ public class SearchView extends JFrame {
             JOptionPane.showMessageDialog(this, "Bitte einen Suchtext angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        controller.startSearch(folder.trim(), q.trim(), selectedDrives);
+        controller.startSearch(folder.trim(), q.trim(), selectedDrives, caseSensitive);
     }
 
     private void onCancel() {
