@@ -32,6 +32,9 @@ public class SearchController implements SearchEventListener {
         }
         boolean ok = service.cancel(id);
         model.setStatus(ok ? "Suche abgebrochen" : "Abbruch fehlgeschlagen");
+        if (ok) {
+            model.setId(null);
+        }
         return ok;
     }
 
