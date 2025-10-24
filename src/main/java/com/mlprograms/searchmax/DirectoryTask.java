@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.RecursiveAction;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.logging.Level;
@@ -28,6 +29,7 @@ public final class DirectoryTask extends RecursiveAction {
     private final int queryLen;
     private final long startNano;
     private final Consumer<String> emitter;
+    private final AtomicBoolean cancelled;
 
     public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter) {
         this.directoryPath = directoryPath;
@@ -37,11 +39,24 @@ public final class DirectoryTask extends RecursiveAction {
         this.queryLen = this.query.length();
         this.startNano = startNano;
         this.emitter = emitter;
+        this.cancelled = new AtomicBoolean(false);
+    }
+
+    // Neuer Konstruktor, der ein externes Abbruch-Flag verwendet
+    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled) {
+        this.directoryPath = directoryPath;
+        this.result = result == null ? new ConcurrentLinkedQueue<>() : result;
+        this.matchCount = matchCount;
+        this.query = (query == null) ? "" : query;
+        this.queryLen = this.query.length();
+        this.startNano = startNano;
+        this.emitter = emitter;
+        this.cancelled = cancelled == null ? new AtomicBoolean(false) : cancelled;
     }
 
     @Override
     protected void compute() {
-        if (Thread.currentThread().isInterrupted() || directoryPath == null || !Files.isDirectory(directoryPath)) {
+        if (Thread.currentThread().isInterrupted() || (cancelled != null && cancelled.get()) || directoryPath == null || !Files.isDirectory(directoryPath)) {
             return;
         }
 
@@ -49,7 +64,7 @@ public final class DirectoryTask extends RecursiveAction {
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directoryPath)) {
             for (Path entry : stream) {
-                if (Thread.currentThread().isInterrupted()) {
+                if (Thread.currentThread().isInterrupted() || (cancelled != null && cancelled.get())) {
                     return;
                 }
 
@@ -58,7 +73,7 @@ public final class DirectoryTask extends RecursiveAction {
                         if (isSystemDirectory(entry)) {
                             continue;
                         }
-                        subtasks.add(new DirectoryTask(entry, result, matchCount, query, startNano, emitter));
+                        subtasks.add(new DirectoryTask(entry, result, matchCount, query, startNano, emitter, cancelled));
                         if (subtasks.size() >= CHUNK_SIZE) {
                             invokeAll(new ArrayList<>(subtasks));
                             subtasks.clear();
@@ -89,7 +104,7 @@ public final class DirectoryTask extends RecursiveAction {
     }
 
     private void checkAndAddIfMatches(final Path filePath) {
-        if (Thread.currentThread().isInterrupted()) {
+        if (Thread.currentThread().isInterrupted() || (cancelled != null && cancelled.get())) {
             return;
         }
 
@@ -151,4 +166,3 @@ public final class DirectoryTask extends RecursiveAction {
     }
 
 }
-

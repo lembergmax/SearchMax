@@ -4,7 +4,6 @@ import com.mlprograms.searchmax.DirectoryTask;
 import com.mlprograms.searchmax.SearchHandle;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -67,9 +66,18 @@ public final class SearchService {
             return false;
         }
         try {
-            final ForkJoinTask<?> task = handle.getTask();
-            if (task != null) {
-                task.cancel(true);
+            // Markiere das Handle als abgebrochen, damit laufende Tasks das erkennen
+            try {
+                handle.getCancelled().set(true);
+            } catch (Exception ignore) {
+                // Ignoriere
+            }
+            // Versuche alle registrierten Tasks abzubrechen
+            final Collection<ForkJoinTask<?>> tasks = handle.getTasks();
+            for (ForkJoinTask<?> t : tasks) {
+                if (t != null) {
+                    t.cancel(true);
+                }
             }
             return true;
         } catch (Exception e) {
@@ -184,12 +192,45 @@ public final class SearchService {
 
     // Neue Methode für die Suche in ausgewählten Laufwerken
     private void handleSearchSelectedDrives(List<String> drives, String queryText, SearchEventListener listener) {
-        for (String drive : drives) {
-            String drivePath = drive.trim();
-            if (!drivePath.endsWith("\\")) {
-                drivePath += "\\";
+        if (drives == null || drives.isEmpty()) {
+            listener.onError("Keine Laufwerke angegeben");
+            return;
+        }
+
+        final long startNano = System.nanoTime();
+        final String searchId = UUID.randomUUID().toString();
+        final SearchHandle sharedHandle = createSearchHandle(startNano, drives.size());
+
+        searches.put(searchId, sharedHandle);
+        listener.onId(searchId);
+
+        for (String raw : drives) {
+            final String t = raw == null ? "" : raw.trim();
+            if (t.isEmpty()) {
+                sharedHandle.getRemainingTasks().decrementAndGet();
+                continue;
             }
-            startSearch(drivePath, queryText, listener);
+
+            String normalized = t;
+            if (t.length() == 1 && Character.isLetter(t.charAt(0))) {
+                normalized = t + ":\\";
+            } else if (t.length() == 2 && Character.isLetter(t.charAt(0)) && t.charAt(1) == ':') {
+                normalized = t + "\\";
+            }
+
+            final Path rootPath = Paths.get(normalized);
+            if (Files.exists(rootPath)) {
+                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener);
+            } else {
+                sharedHandle.getRemainingTasks().decrementAndGet();
+            }
+        }
+
+        if (sharedHandle.getRemainingTasks().get() <= 0) {
+            final AtomicInteger matches = sharedHandle.getMatchCount();
+            final int total = (matches == null) ? 0 : matches.get();
+            listener.onEnd(String.format("%d Treffer", total));
+            searches.entrySet().removeIf(e -> e.getValue() == sharedHandle);
         }
     }
 
@@ -227,7 +268,7 @@ public final class SearchService {
 
         ForkJoinTask<?> submitted = pool.submit(() -> {
             try {
-                pool.invoke(new DirectoryTask(startPath, results, matchCount, queryText, searchHandle.getStartNano(), onMatch));
+                pool.invoke(new DirectoryTask(startPath, results, matchCount, queryText, searchHandle.getStartNano(), onMatch, searchHandle.getCancelled()));
             } catch (Throwable t) {
                 LOGGER.log(Level.SEVERE, "Suche fehlgeschlagen (id=" + id + ")", t);
                 safeSendError(listener, "Suche fehlgeschlagen: " + t.getMessage());
@@ -237,6 +278,9 @@ public final class SearchService {
         });
 
         searchHandle.setTask(submitted);
+        // Falls das handle mehrere Tasks verwalten soll (z.B. für mehrere Startpfade), sicherstellen, dass das Task
+        // zur Liste hinzugefügt wird. setTask fügt bereits hinzu; falls zusätzliche Tasks entstehen, kann addTask verwendet werden.
+        searchHandle.addTask(submitted);
     }
 
     private void completeHandle(final SearchHandle handle, final SearchEventListener listener) {
