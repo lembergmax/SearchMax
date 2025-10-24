@@ -29,6 +29,9 @@ public class SearchView extends JFrame {
     private javax.swing.Timer dotTimer;
     private int dotCount = 0;
 
+    // Flag, ob eine Suche läuft (wird von updateButtons gesetzt)
+    private volatile boolean running = false;
+
     private JPanel drivePanel;
     private JCheckBox[] driveCheckBoxes;
 
@@ -203,14 +206,24 @@ public class SearchView extends JFrame {
     }
 
     private void updateButtons(boolean running) {
+        this.running = running;
         searchButton.setEnabled(!running);
         cancelButton.setEnabled(running);
-        folderField.setEnabled(!running);
+        // queryField darf nur bearbeitet werden, wenn nicht running
         queryField.setEnabled(!running);
-        browseButton.setEnabled(!running);
+        // Die Aktivierung des Ordnerfelds/Browse-Buttons wird von `updateFolderFieldState()` gesteuert; rufe sie jetzt auf,
+        // damit nach Start/Stop der Suche das Ordnerfeld sofort korrekt freigegeben bzw. gesperrt wird.
+        updateFolderFieldState();
     }
 
     private void updateFolderFieldState() {
+        // Wenn gerade eine Suche läuft, sperre Startordner-Bedienung unabhängig von der Laufwerk-Auswahl
+        if (running) {
+            folderField.setEnabled(false);
+            browseButton.setEnabled(false);
+            return;
+        }
+
         boolean anyDriveSelected = false;
         if (driveCheckBoxes != null) {
             for (JCheckBox cb : driveCheckBoxes) {
@@ -220,6 +233,7 @@ public class SearchView extends JFrame {
                 }
             }
         }
+        // Wenn ein Laufwerk ausgewählt ist, ist das Ordnerfeld gesperrt; sonst frei.
         folderField.setEnabled(!anyDriveSelected);
         browseButton.setEnabled(!anyDriveSelected);
         // Der Text im Feld bleibt erhalten, wird aber gesperrt, wenn ein Laufwerk ausgewählt ist
@@ -288,7 +302,14 @@ public class SearchView extends JFrame {
     }
 
     private void onCancel() {
-        controller.cancelSearch();
+        boolean ok = controller.cancelSearch();
+        if (ok) {
+            // Stelle UI sofort wieder her (falls Model-Event noch nicht angekommen ist)
+            updateButtons(false);
+        } else {
+            // Falls kein laufender Search existierte, dennoch prüfen ob Ordnerfeld freigegeben werden kann
+            updateFolderFieldState();
+        }
     }
 
 }
