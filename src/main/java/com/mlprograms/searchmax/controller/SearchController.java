@@ -5,6 +5,7 @@ import com.mlprograms.searchmax.service.SearchEventListener;
 import com.mlprograms.searchmax.service.SearchService;
 
 import javax.swing.SwingUtilities;
+import java.util.List;
 
 public class SearchController implements SearchEventListener {
 
@@ -16,11 +17,11 @@ public class SearchController implements SearchEventListener {
         this.model = model;
     }
 
-    public void startSearch(String folder, String query) {
+    public void startSearch(String folder, String query, List<String> drives) {
         model.clearResults();
         model.setStatus("Suche läuft...");
         model.setId(null);
-        service.search(folder, query, this);
+        service.search(folder, query, drives, this);
     }
 
     public boolean cancelSearch() {

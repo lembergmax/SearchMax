@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -27,9 +28,13 @@ public final class SearchService {
         this.pool = new ForkJoinPool(Math.max(1, Runtime.getRuntime().availableProcessors()));
     }
 
-    public void search(final String folderPath, final String queryText, final SearchEventListener listener) {
+    public void search(final String folderPath, final String queryText, final List<String> drives, final SearchEventListener listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener darf nicht null sein");
+        }
+        if (drives != null && !drives.isEmpty()) {
+            handleSearchSelectedDrives(drives, queryText, listener);
+            return;
         }
 
         if (folderPath != null) {
@@ -174,6 +179,17 @@ public final class SearchService {
             final int total = (matches == null) ? 0 : matches.get();
             listener.onEnd(String.format("%d Treffer", total));
             searches.entrySet().removeIf(e -> e.getValue() == sharedHandle);
+        }
+    }
+
+    // Neue Methode für die Suche in ausgewählten Laufwerken
+    private void handleSearchSelectedDrives(List<String> drives, String queryText, SearchEventListener listener) {
+        for (String drive : drives) {
+            String drivePath = drive.trim();
+            if (!drivePath.endsWith("\\")) {
+                drivePath += "\\";
+            }
+            startSearch(drivePath, queryText, listener);
         }
     }
 

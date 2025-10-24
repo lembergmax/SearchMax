@@ -24,6 +24,9 @@ public class SearchView extends JFrame {
     private final JLabel statusLabel = new JLabel("Bereit");
     private final JLabel idLabel = new JLabel("-");
 
+    private JPanel drivePanel;
+    private JCheckBox[] driveCheckBoxes;
+
     public SearchView(SearchController controller, SearchModel model) {
         super("SearchMax - Desktop");
         this.controller = controller;
@@ -37,34 +40,32 @@ public class SearchView extends JFrame {
         setSize(800, 600);
         setLocationRelativeTo(null);
 
+        // Panel für Laufwerksauswahl
+        File[] roots = File.listRoots();
+        drivePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        drivePanel.setBorder(BorderFactory.createTitledBorder("Laufwerke durchsuchen"));
+        driveCheckBoxes = new JCheckBox[roots.length];
+        for (int i = 0; i < roots.length; i++) {
+            driveCheckBoxes[i] = new JCheckBox(roots[i].getPath());
+            driveCheckBoxes[i].setSelected(true);
+            drivePanel.add(driveCheckBoxes[i]);
+        }
+
         JPanel top = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(4, 4, 4, 4);
-        c.gridx = 0;
-        c.gridy = 0;
-        c.anchor = GridBagConstraints.WEST;
+        c.gridx = 0; c.gridy = 0; c.anchor = GridBagConstraints.WEST;
         top.add(new JLabel("Ordner"), c);
-        c.gridx = 1;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        c.weightx = 1.0;
+        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; c.weightx = 1.0;
         top.add(folderField, c);
-        c.gridx = 2;
-        c.fill = GridBagConstraints.NONE;
-        c.weightx = 0;
+        c.gridx = 2; c.fill = GridBagConstraints.NONE; c.weightx = 0;
         top.add(browseButton, c);
-
-        c.gridx = 0;
-        c.gridy = 1;
-        top.add(new JLabel("Suchtext"), c);
-        c.gridx = 1;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        top.add(queryField, c);
-        c.gridx = 2;
-        c.fill = GridBagConstraints.NONE;
-        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        btnPanel.add(searchButton);
-        btnPanel.add(cancelButton);
-        top.add(btnPanel, c);
+        c.gridx = 0; c.gridy = 1; c.gridwidth = 3; c.fill = GridBagConstraints.HORIZONTAL;
+        top.add(drivePanel, c);
+        c.gridwidth = 1;
+        c.gridx = 0; c.gridy = 2; top.add(new JLabel("Suchtext"), c);
+        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(queryField, c);
+        c.gridx = 2; c.fill = GridBagConstraints.NONE; JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT)); btnPanel.add(searchButton); btnPanel.add(cancelButton); top.add(btnPanel, c);
 
         JPanel center = new JPanel(new BorderLayout());
         resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -174,9 +175,26 @@ public class SearchView extends JFrame {
         }
     }
 
+    private java.util.List<String> getSelectedDrives() {
+        java.util.List<String> drives = new java.util.ArrayList<>();
+        if (driveCheckBoxes != null) {
+            for (JCheckBox cb : driveCheckBoxes) {
+                if (cb.isSelected()) {
+                    drives.add(cb.getText());
+                }
+            }
+        }
+        return drives;
+    }
+
     private void onSearch() {
         String folder = folderField.getText();
         String q = queryField.getText();
+        java.util.List<String> selectedDrives = getSelectedDrives();
+        if (selectedDrives.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Bitte mindestens ein Laufwerk auswählen.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
         if (folder == null || folder.trim().isEmpty()) {
             JOptionPane.showMessageDialog(this, "Bitte einen Startordner angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
@@ -185,7 +203,7 @@ public class SearchView extends JFrame {
             JOptionPane.showMessageDialog(this, "Bitte einen Suchtext angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        controller.startSearch(folder.trim(), q.trim());
+        controller.startSearch(folder.trim(), q.trim(), selectedDrives);
     }
 
     private void onCancel() {
@@ -193,4 +211,3 @@ public class SearchView extends JFrame {
     }
 
 }
-
