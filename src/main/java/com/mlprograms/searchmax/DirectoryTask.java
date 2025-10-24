@@ -30,8 +30,9 @@ public final class DirectoryTask extends RecursiveAction {
     private final long startNano;
     private final Consumer<String> emitter;
     private final AtomicBoolean cancelled;
+    private final boolean caseSensitive;
 
-    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter) {
+    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, boolean caseSensitive) {
         this.directoryPath = directoryPath;
         this.result = result == null ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -40,10 +41,11 @@ public final class DirectoryTask extends RecursiveAction {
         this.startNano = startNano;
         this.emitter = emitter;
         this.cancelled = new AtomicBoolean(false);
+        this.caseSensitive = caseSensitive;
     }
 
     // Neuer Konstruktor, der ein externes Abbruch-Flag verwendet
-    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled) {
+    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive) {
         this.directoryPath = directoryPath;
         this.result = result == null ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -52,6 +54,7 @@ public final class DirectoryTask extends RecursiveAction {
         this.startNano = startNano;
         this.emitter = emitter;
         this.cancelled = cancelled == null ? new AtomicBoolean(false) : cancelled;
+        this.caseSensitive = caseSensitive;
     }
 
     @Override
@@ -73,7 +76,7 @@ public final class DirectoryTask extends RecursiveAction {
                         if (isSystemDirectory(entry)) {
                             continue;
                         }
-                        subtasks.add(new DirectoryTask(entry, result, matchCount, query, startNano, emitter, cancelled));
+                        subtasks.add(new DirectoryTask(entry, result, matchCount, query, startNano, emitter, cancelled, caseSensitive));
                         if (subtasks.size() >= CHUNK_SIZE) {
                             invokeAll(new ArrayList<>(subtasks));
                             subtasks.clear();
@@ -157,8 +160,9 @@ public final class DirectoryTask extends RecursiveAction {
         final int sl = src.length();
         final int tl = target.length();
         final int max = sl - tl;
+        final boolean ignoreCase = !caseSensitive;
         for (int i = 0; i <= max; i++) {
-            if (src.regionMatches(true, i, target, 0, tl)) {
+            if (src.regionMatches(ignoreCase, i, target, 0, tl)) {
                 return true;
             }
         }
