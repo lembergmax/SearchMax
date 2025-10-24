@@ -2,6 +2,12 @@ package com.mlprograms.searchmax.view;
 
 import com.mlprograms.searchmax.controller.SearchController;
 import com.mlprograms.searchmax.model.SearchModel;
+import com.sun.jna.Native;
+import com.sun.jna.Pointer;
+import com.sun.jna.platform.win32.Ole32;
+import com.sun.jna.platform.win32.Shell32;
+import com.sun.jna.platform.win32.ShellAPI;
+import com.sun.jna.platform.win32.ShlObj;
 
 import javax.swing.*;
 import java.awt.*;
@@ -9,7 +15,11 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.concurrent.TimeUnit;
 
 public class SearchView extends JFrame {
 
@@ -42,16 +52,31 @@ public class SearchView extends JFrame {
         JPanel top = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(4, 4, 4, 4);
-        c.gridx = 0; c.gridy = 0; c.anchor = GridBagConstraints.WEST;
+        c.gridx = 0;
+        c.gridy = 0;
+        c.anchor = GridBagConstraints.WEST;
         top.add(new JLabel("Ordner"), c);
-        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; c.weightx = 1.0;
+        c.gridx = 1;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1.0;
         top.add(folderField, c);
-        c.gridx = 2; c.fill = GridBagConstraints.NONE; c.weightx = 0;
+        c.gridx = 2;
+        c.fill = GridBagConstraints.NONE;
+        c.weightx = 0;
         top.add(browseButton, c);
 
-        c.gridx = 0; c.gridy = 1; top.add(new JLabel("Suchtext"), c);
-        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(queryField, c);
-        c.gridx = 2; c.fill = GridBagConstraints.NONE; JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT)); btnPanel.add(searchButton); btnPanel.add(cancelButton); top.add(btnPanel, c);
+        c.gridx = 0;
+        c.gridy = 1;
+        top.add(new JLabel("Suchtext"), c);
+        c.gridx = 1;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        top.add(queryField, c);
+        c.gridx = 2;
+        c.fill = GridBagConstraints.NONE;
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.add(searchButton);
+        btnPanel.add(cancelButton);
+        top.add(btnPanel, c);
 
         JPanel center = new JPanel(new BorderLayout());
         resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -60,7 +85,11 @@ public class SearchView extends JFrame {
 
         JPanel bottom = new JPanel(new BorderLayout());
         JPanel info = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        info.add(new JLabel("Status: ")); info.add(statusLabel); info.add(Box.createHorizontalStrut(16)); info.add(new JLabel("Id: ")); info.add(idLabel);
+        info.add(new JLabel("Status: "));
+        info.add(statusLabel);
+        info.add(Box.createHorizontalStrut(16));
+        info.add(new JLabel("Id: "));
+        info.add(idLabel);
         bottom.add(info, BorderLayout.WEST);
 
         getContentPane().setLayout(new BorderLayout());
@@ -134,10 +163,26 @@ public class SearchView extends JFrame {
 
     private void onBrowse() {
         JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Ordner auswählen");
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        int ret = chooser.showOpenDialog(this);
-        if (ret == JFileChooser.APPROVE_OPTION) {
-            folderField.setText(chooser.getSelectedFile().getAbsolutePath());
+        chooser.setAcceptAllFileFilterUsed(false);
+
+        // Falls bereits ein Pfad im Textfeld steht, starte dort
+        String currentPath = folderField.getText();
+        if (currentPath != null && !currentPath.isBlank()) {
+            File currentDir = new File(currentPath);
+            if (currentDir.exists() && currentDir.isDirectory()) {
+                chooser.setCurrentDirectory(currentDir);
+            }
+        }
+
+        int result = chooser.showOpenDialog(this);
+
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFolder = chooser.getSelectedFile();
+            if (selectedFolder != null && selectedFolder.isDirectory()) {
+                folderField.setText(selectedFolder.getAbsolutePath());
+            }
         }
     }
 
