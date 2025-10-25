@@ -43,11 +43,45 @@ public final class TopPanel extends JPanel {
         gbc.weightx = 0;
         add(browseButton, gbc);
 
+        // Drive panel auf eigene Zeile
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.gridwidth = 3;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         add(parent.getDrivePanel(), gbc);
+
+        // Suchtext-Row
+        gbc.gridy = 2;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        add(new JLabel("Suchtext"), gbc);
+
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        add(queryField, gbc);
+
+        gbc.gridx = 2;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        add(searchButton, gbc);
+
+        // Row mit Checkbox und weiteren Buttons
+        gbc.gridy = 3;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.anchor = GridBagConstraints.WEST;
+        add(caseSensitiveCheck, gbc);
+
+        gbc.gridx = 1;
+        gbc.anchor = GridBagConstraints.CENTER;
+        add(cancelButton, gbc);
+
+        gbc.gridx = 2;
+        gbc.anchor = GridBagConstraints.EAST;
+        add(manageFiltersButton, gbc);
     }
 
     public void addListeners() {

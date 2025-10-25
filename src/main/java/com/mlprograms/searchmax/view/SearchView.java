@@ -42,7 +42,7 @@ public final class SearchView extends JFrame {
 
         this.drivePanel = new DrivePanel(this);
         this.topPanel = new TopPanel(this);
-        this.centerPanel = new CenterPanel();
+        this.centerPanel = new CenterPanel(this);
         this.bottomPanel = new BottomPanel();
         this.statusUpdater = new StatusUpdater(this);
 
@@ -52,14 +52,20 @@ public final class SearchView extends JFrame {
 
     private void initUI() {
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        setSize(800, 600);
-        setLocationRelativeTo(null);
 
         getContentPane().add(topPanel, java.awt.BorderLayout.NORTH);
         getContentPane().add(centerPanel, java.awt.BorderLayout.CENTER);
         getContentPane().add(bottomPanel, java.awt.BorderLayout.SOUTH);
 
         topPanel.addListeners();
+
+        updateButtons(false);
+
+        pack();
+        setMinimumSize(new java.awt.Dimension(700, 400));
+        setSize(800, 600);
+
+        setLocationRelativeTo(null);
     }
 
     void onBrowse() {
