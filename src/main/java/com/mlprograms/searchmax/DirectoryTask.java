@@ -34,21 +34,11 @@ public final class DirectoryTask extends RecursiveAction {
     private final List<String> extensionsAllow; // allowed extensions (lowercase, with dot), null = no restriction
     private final List<String> extensionsDeny; // denied extensions (lowercase, with dot), null = no restriction
     private final List<String> includeFilters; // filename must contain at least one, null = no restriction
-    private final Map<String,Boolean> includeCaseMap; // per-pattern case sensitivity
+    private final Map<String, Boolean> includeCaseMap; // per-pattern case sensitivity
     private final List<String> excludeFilters; // filename must not contain any of these, null = no restriction
-    private final Map<String,Boolean> excludeCaseMap;
+    private final Map<String, Boolean> excludeCaseMap;
 
-    @SuppressWarnings("unused")
-    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, boolean caseSensitive) {
-        this(directoryPath, result, matchCount, query, startNano, emitter, new AtomicBoolean(false), caseSensitive, null, null, null, null, null, null);
-    }
-
-    @SuppressWarnings("unused")
-    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive) {
-        this(directoryPath, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, null, null, null, null, null, null);
-    }
-
-    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive, List<String> extensionsAllow, List<String> extensionsDeny, List<String> includeFilters, Map<String,Boolean> includeCaseMap, List<String> excludeFilters, Map<String,Boolean> excludeCaseMap) {
+    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive, List<String> extensionsAllow, List<String> extensionsDeny, List<String> includeFilters, Map<String, Boolean> includeCaseMap, List<String> excludeFilters, Map<String, Boolean> excludeCaseMap) {
         this.directoryPath = directoryPath;
         this.result = result == null ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -140,9 +130,15 @@ public final class DirectoryTask extends RecursiveAction {
                 if (inc == null || inc.isEmpty()) continue;
                 boolean patCase = includeCaseMap != null && Boolean.TRUE.equals(includeCaseMap.get(inc));
                 if (patCase) {
-                    if (fileName.contains(inc)) { any = true; break; }
+                    if (fileName.contains(inc)) {
+                        any = true;
+                        break;
+                    }
                 } else {
-                    if (fileName.toLowerCase(Locale.ROOT).contains(inc.toLowerCase(Locale.ROOT))) { any = true; break; }
+                    if (fileName.toLowerCase(Locale.ROOT).contains(inc.toLowerCase(Locale.ROOT))) {
+                        any = true;
+                        break;
+                    }
                 }
             }
             if (!any) return;
@@ -173,7 +169,10 @@ public final class DirectoryTask extends RecursiveAction {
             boolean extOk = false;
             for (String ex : extensionsAllow) {
                 if (ex == null || ex.isEmpty()) continue;
-                if (lower.endsWith(ex)) { extOk = true; break; }
+                if (lower.endsWith(ex)) {
+                    extOk = true;
+                    break;
+                }
             }
             if (!extOk) return;
         }
@@ -194,7 +193,11 @@ public final class DirectoryTask extends RecursiveAction {
         result.add(formatted);
         if (matchCount != null) matchCount.incrementAndGet();
         if (emitter != null) {
-            try { emitter.accept(formatted); } catch (Exception e) { LOGGER.log(Level.FINE, "Emitter-Consumer warf eine Ausnahme für Datei " + filePath + ": " + e.getMessage()); }
+            try {
+                emitter.accept(formatted);
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Emitter-Consumer warf eine Ausnahme für Datei " + filePath + ": " + e.getMessage());
+            }
         }
     }
 

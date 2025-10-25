@@ -172,7 +172,7 @@ public class SearchView extends JFrame {
         c.gridx = 0;
         c.gridy = 3;
         c.fill = GridBagConstraints.NONE;
-        top.add(new JLabel("Namensfilter (optional)"), c);
+        top.add(new JLabel("Zusätzliche Filter"), c);
         c.gridx = 1;
         c.fill = GridBagConstraints.HORIZONTAL;
         top.add(manageFiltersButton, c);
