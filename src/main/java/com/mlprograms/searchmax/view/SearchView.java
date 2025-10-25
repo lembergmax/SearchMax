@@ -50,6 +50,7 @@ public final class SearchView extends JFrame {
 
         initUI();
         bindModel();
+        loadSettings();
 
         // TODO: irgendwie anders lösen
         SwingUtilities.invokeLater(() -> {
@@ -203,7 +204,8 @@ public final class SearchView extends JFrame {
     }
 
     void onManageFilters() {
-        FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny);
+        // pass also the case maps so the dialog can initialize the case checkboxes correctly
+        FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase);
         filtersDialog.setVisible(true);
 
         if (filtersDialog.isConfirmed()) {
@@ -283,6 +285,83 @@ public final class SearchView extends JFrame {
         }
 
         return stringBuilder.toString();
+    }
+
+    // neue Methode: lade Einstellungen beim Start
+    private void loadSettings() {
+        try {
+            java.io.File file = settingsFile.toFile();
+            if (!file.exists()) return;
+            final Properties properties = new Properties();
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+                properties.load(fis);
+            }
+
+            String inc = properties.getProperty("includes", "").trim();
+            if (!inc.isEmpty()) {
+                String[] parts = inc.split(",");
+                for (String p : parts) {
+                    String t = p.trim();
+                    if (!t.isEmpty()) knownIncludes.put(t, true);
+                }
+            }
+            String exc = properties.getProperty("excludes", "").trim();
+            if (!exc.isEmpty()) {
+                String[] parts = exc.split(",");
+                for (String p : parts) {
+                    String t = p.trim();
+                    if (!t.isEmpty()) knownExcludes.put(t, true);
+                }
+            }
+
+            String incCase = properties.getProperty("includesCase", "").trim();
+            if (!incCase.isEmpty()) {
+                Map<String, Boolean> m = stringToMapBoolean(incCase);
+                knownIncludesCase.clear();
+                knownIncludesCase.putAll(m);
+            }
+            String excCase = properties.getProperty("excludesCase", "").trim();
+            if (!excCase.isEmpty()) {
+                Map<String, Boolean> m = stringToMapBoolean(excCase);
+                knownExcludesCase.clear();
+                knownExcludesCase.putAll(m);
+            }
+
+            String allow = properties.getProperty("extensionsAllow", "").trim();
+            if (!allow.isEmpty()) {
+                String[] parts = allow.split(",");
+                for (String p : parts) {
+                    String t = p.trim();
+                    if (!t.isEmpty()) knownExtensionsAllow.put(t, true);
+                }
+            }
+            String deny = properties.getProperty("extensionsDeny", "").trim();
+            if (!deny.isEmpty()) {
+                String[] parts = deny.split(",");
+                for (String p : parts) {
+                    String t = p.trim();
+                    if (!t.isEmpty()) knownExtensionsDeny.put(t, true);
+                }
+            }
+
+        } catch (Exception e) {
+            log.warn("Fehler beim Laden der Filtereinstellungen", e);
+        }
+    }
+
+    private Map<String, Boolean> stringToMapBoolean(String s) {
+        Map<String, Boolean> out = new LinkedHashMap<>();
+        String[] parts = s.split(";");
+        for (String p : parts) {
+            String t = p.trim();
+            if (t.isEmpty()) continue;
+            int idx = t.indexOf('=');
+            if (idx <= 0) continue;
+            String k = t.substring(0, idx);
+            String v = t.substring(idx + 1);
+            out.put(k, Boolean.TRUE.toString().equalsIgnoreCase(v) || "true".equalsIgnoreCase(v));
+        }
+        return out;
     }
 
 

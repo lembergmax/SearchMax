@@ -24,10 +24,6 @@ public class SearchModel {
         pcs.addPropertyChangeListener(l);
     }
 
-    public void removePropertyChangeListener(PropertyChangeListener l) {
-        pcs.removePropertyChangeListener(l);
-    }
-
     public List<String> getResults() {
         synchronized (results) {
             return Collections.unmodifiableList(new ArrayList<>(results));

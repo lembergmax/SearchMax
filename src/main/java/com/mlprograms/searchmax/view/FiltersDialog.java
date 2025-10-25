@@ -19,12 +19,16 @@ public class FiltersDialog extends JDialog {
     private final FiltersTableModel filtersModel = new FiltersTableModel();
     private final Map<String, Boolean> initialExtensionsAllow; // initial allow extensions
     private final Map<String, Boolean> initialExtensionsDeny; // initial deny extensions
+    private final Map<String, Boolean> initialIncludesCase; // initial case flags for includes
+    private final Map<String, Boolean> initialExcludesCase; // initial case flags for excludes
     private boolean confirmed = false;
 
     public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes) {
         super(owner, "Dateiname-Filter verwalten", true);
         this.initialExtensionsAllow = null;
         this.initialExtensionsDeny = null;
+        this.initialIncludesCase = null;
+        this.initialExcludesCase = null;
         if (initialIncludes != null) {
             for (Map.Entry<String, Boolean> e : initialIncludes.entrySet()) {
                 String k = e.getKey();
@@ -55,6 +59,8 @@ public class FiltersDialog extends JDialog {
         super(owner, "Dateiname-Filter verwalten", true);
         this.initialExtensionsAllow = initialExtensionsAllow == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsAllow);
         this.initialExtensionsDeny = initialExtensionsDeny == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsDeny);
+        this.initialIncludesCase = null;
+        this.initialExcludesCase = null;
         if (initialIncludes != null) {
             for (Map.Entry<String, Boolean> e : initialIncludes.entrySet()) {
                 String k = e.getKey();
@@ -75,6 +81,55 @@ public class FiltersDialog extends JDialog {
                 filtersModel.addEntry(t, enabled, true);
             }
         }
+        initUI();
+        pack();
+        setLocationRelativeTo(owner);
+    }
+
+    // Neuer Konstruktor: inkl. initiale Groß-/Kleinschreibungs-Maps
+    public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase) {
+        super(owner, "Dateiname-Filter verwalten", true);
+        this.initialExtensionsAllow = initialExtensionsAllow == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsAllow);
+        this.initialExtensionsDeny = initialExtensionsDeny == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsDeny);
+        this.initialIncludesCase = initialIncludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialIncludesCase);
+        this.initialExcludesCase = initialExcludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExcludesCase);
+
+        if (initialIncludes != null) {
+            for (Map.Entry<String, Boolean> e : initialIncludes.entrySet()) {
+                String k = e.getKey();
+                boolean enabled = Boolean.TRUE.equals(e.getValue());
+                if (k == null) continue;
+                String t = k.trim();
+                if (t.isEmpty()) continue;
+                filtersModel.addEntry(t, enabled, false);
+            }
+        }
+        if (initialExcludes != null) {
+            for (Map.Entry<String, Boolean> e : initialExcludes.entrySet()) {
+                String k = e.getKey();
+                boolean enabled = Boolean.TRUE.equals(e.getValue());
+                if (k == null) continue;
+                String t = k.trim();
+                if (t.isEmpty()) continue;
+                filtersModel.addEntry(t, enabled, true);
+            }
+        }
+
+        // apply case-sensitivity flags if provided
+        if (this.initialIncludesCase != null || this.initialExcludesCase != null) {
+            for (FiltersTableModel.Entry en : filtersModel.getEntries()) {
+                boolean cs = false;
+                if (!en.exclude && this.initialIncludesCase != null) {
+                    Boolean v = this.initialIncludesCase.get(en.pattern);
+                    cs = Boolean.TRUE.equals(v);
+                } else if (en.exclude && this.initialExcludesCase != null) {
+                    Boolean v = this.initialExcludesCase.get(en.pattern);
+                    cs = Boolean.TRUE.equals(v);
+                }
+                en.caseSensitive = cs;
+            }
+        }
+
         initUI();
         pack();
         setLocationRelativeTo(owner);
