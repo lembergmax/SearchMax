@@ -8,6 +8,10 @@ import java.awt.*;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class SearchView extends JFrame {
 
@@ -25,6 +29,11 @@ public class SearchView extends JFrame {
     private final JLabel statusLabel = new JLabel("Bereit");
     private final JLabel idLabel = new JLabel("-");
 
+    // Neu: Feld für Dateiendungen (z. B. ".java,.txt")
+    private final JTextField extensionsField = new JTextField(20);
+    private final JButton manageExtensionsButton = new JButton("Verwalten...");
+    private final JButton manageFiltersButton = new JButton("Filter verwalten...");
+
     // Timer und Zähler für die Punkt-Animation ("Suche läuft...")
     private javax.swing.Timer dotTimer;
     private int dotCount = 0;
@@ -35,10 +44,20 @@ public class SearchView extends JFrame {
     private JPanel drivePanel;
     private JCheckBox[] driveCheckBoxes;
 
+    // Bekannte Endungen inkl. Aktiv-Flag (LinkedHashMap für stabile Reihenfolge)
+    private final Map<String, Boolean> knownExtensions = new LinkedHashMap<>();
+    // Bekannte Include/Exclude Filter für Dateinamen
+    private final Map<String, Boolean> knownIncludes = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownExcludes = new LinkedHashMap<>();
+
     public SearchView(SearchController controller, SearchModel model) {
         super("SearchMax - Desktop");
         this.controller = controller;
         this.model = model;
+        // initialisiere knownExtensions aus dem (evtl.) vorhandenen Text im Feld
+        for (String e : parseExtensions(extensionsField.getText())) {
+            knownExtensions.put(e, Boolean.TRUE);
+        }
         initUI();
         bindModel();
     }
@@ -76,6 +95,13 @@ public class SearchView extends JFrame {
         c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(queryField, c);
         c.gridx = 2; c.fill = GridBagConstraints.NONE; JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT)); btnPanel.add(caseSensitiveCheck); btnPanel.add(searchButton); btnPanel.add(cancelButton); top.add(btnPanel, c);
 
+        // Neue Zeile: Dateiendungen
+        c.gridx = 0; c.gridy = 3; c.fill = GridBagConstraints.NONE; top.add(new JLabel("Dateiendungen (z.B. .java,.txt)"), c);
+        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(extensionsField, c);
+        c.gridx = 2; c.fill = GridBagConstraints.NONE; top.add(manageExtensionsButton, c);
+        c.gridx = 0; c.gridy = 4; c.fill = GridBagConstraints.NONE; top.add(new JLabel("Namensfilter (optional)"), c);
+        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(manageFiltersButton, c);
+
         JPanel center = new JPanel(new BorderLayout());
         resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         resultList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -101,6 +127,8 @@ public class SearchView extends JFrame {
 
         browseButton.addActionListener(e -> onBrowse());
         searchButton.addActionListener(e -> onSearch());
+        manageExtensionsButton.addActionListener(e -> onManageExtensions());
+        manageFiltersButton.addActionListener(e -> onManageFilters());
         cancelButton.addActionListener(e -> onCancel());
 
         resultList.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -211,6 +239,7 @@ public class SearchView extends JFrame {
         cancelButton.setEnabled(running);
         // queryField darf nur bearbeitet werden, wenn nicht running
         queryField.setEnabled(!running);
+        extensionsField.setEnabled(!running);
         // Die Aktivierung des Ordnerfelds/Browse-Buttons wird von `updateFolderFieldState()` gesteuert; rufe sie jetzt auf,
         // damit nach Start/Stop der Suche das Ordnerfeld sofort korrekt freigegeben bzw. gesperrt wird.
         updateFolderFieldState();
@@ -276,17 +305,75 @@ public class SearchView extends JFrame {
         return drives;
     }
 
+    private java.util.List<String> parseExtensions(String raw) {
+        java.util.List<String> out = new ArrayList<>();
+        if (raw == null) {
+            return out;
+        }
+        String[] parts = raw.split(",");
+        for (String p : parts) {
+            if (p == null) continue;
+            String t = p.trim();
+            if (t.isEmpty()) continue;
+            // Normiere: stelle sicher, dass es mit einem Punkt beginnt
+            if (!t.startsWith(".")) {
+                t = "." + t;
+            }
+            out.add(t.toLowerCase());
+        }
+        return out;
+    }
+
+    private void onManageExtensions() {
+        // Öffne Dialog mit bekannten Endungen (inkl. aktiv/inaktiv)
+        ExtensionsDialog dlg = new ExtensionsDialog(this, knownExtensions);
+        dlg.setVisible(true);
+        if (dlg.isConfirmed()) {
+            // Update knownExtensions mit Rückgabe aus Dialog (inkl. deaktivierter Einträge)
+            Map<String, Boolean> returned = dlg.getExtensionsMap();
+            knownExtensions.clear();
+            knownExtensions.putAll(returned);
+
+            // Setze das Textfeld auf die kommaseparierte Liste der aktiven Endungen
+            List<String> active = dlg.getActiveExtensions();
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < active.size(); i++) {
+                if (i > 0) sb.append(',');
+                sb.append(active.get(i));
+            }
+            extensionsField.setText(sb.toString());
+        }
+    }
+
+    private void onManageFilters() {
+        FiltersDialog dlg = new FiltersDialog(this, knownIncludes, knownExcludes);
+        dlg.setVisible(true);
+        if (dlg.isConfirmed()) {
+            Map<String, Boolean> inc = dlg.getIncludesMap();
+            Map<String, Boolean> exc = dlg.getExcludesMap();
+            knownIncludes.clear(); knownIncludes.putAll(inc);
+            knownExcludes.clear(); knownExcludes.putAll(exc);
+        }
+    }
+
     private void onSearch() {
         java.util.List<String> selectedDrives = getSelectedDrives();
         String folder = folderField.getText();
         String q = queryField.getText();
         boolean caseSensitive = caseSensitiveCheck.isSelected();
+        java.util.List<String> extensions = parseExtensions(extensionsField.getText());
+        // Build include/exclude lists (only active ones)
+        java.util.List<String> includes = new ArrayList<>();
+        java.util.List<String> excludes = new ArrayList<>();
+        for (Map.Entry<String, Boolean> en : knownIncludes.entrySet()) if (Boolean.TRUE.equals(en.getValue())) includes.add(en.getKey());
+        for (Map.Entry<String, Boolean> en : knownExcludes.entrySet()) if (Boolean.TRUE.equals(en.getValue())) excludes.add(en.getKey());
+
         if (!selectedDrives.isEmpty()) {
-            if (q == null || q.trim().isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Bitte einen Suchtext angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+            if ((q == null || q.trim().isEmpty()) && (extensions.isEmpty())) {
+                JOptionPane.showMessageDialog(this, "Bitte einen Suchtext oder Dateiendungen angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            controller.startSearch("", q.trim(), selectedDrives, caseSensitive);
+            controller.startSearch("", q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensions, includes, excludes);
             return;
         }
         // Kein Laufwerk ausgewählt, Ordner muss angegeben werden
@@ -294,11 +381,11 @@ public class SearchView extends JFrame {
             JOptionPane.showMessageDialog(this, "Bitte einen Startordner angeben oder ein Laufwerk auswählen.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if (q == null || q.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Bitte einen Suchtext angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+        if ((q == null || q.trim().isEmpty()) && (extensions.isEmpty())) {
+            JOptionPane.showMessageDialog(this, "Bitte einen Suchtext oder Dateiendungen angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        controller.startSearch(folder.trim(), q.trim(), selectedDrives, caseSensitive);
+        controller.startSearch(folder.trim(), q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensions, includes, excludes);
     }
 
     private void onCancel() {
