@@ -35,11 +35,13 @@ public final class DirectoryTask extends RecursiveAction {
     private final List<String> includeFilters; // filename must contain at least one (lowercase), null = no restriction
     private final List<String> excludeFilters; // filename must not contain any of these (lowercase), null = no restriction
 
+    @SuppressWarnings("unused")
     public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, boolean caseSensitive) {
         this(directoryPath, result, matchCount, query, startNano, emitter, new AtomicBoolean(false), caseSensitive, null, null, null);
     }
 
     // Neuer Konstruktor, der ein externes Abbruch-Flag verwendet
+    @SuppressWarnings("unused")
     public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive) {
         this(directoryPath, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, null, null, null);
     }
@@ -127,20 +129,13 @@ public final class DirectoryTask extends RecursiveAction {
         }
 
         final String fileName = filePath.getFileName().toString();
-        if (queryLen == 0) {
-            // Wenn kein Suchtext angegeben ist, wir erlauben Matches nur basierend auf Extension
-            // aber die Methode sollte weiterarbeiten, daher nicht returnen hier
-        }
-        if (fileName == null) {
+
+        if (queryLen > 0 && fileName.length() < queryLen) {
+            // falls Query länger als Dateiname ist, ist normal kein Match möglich
             return;
         }
-        if (fileName.length() < queryLen) {
-            // falls Query länger als Dateiname ist, ist normal kein Match möglich
-            // aber Dateiendungs-Filter kann trotzdem greifen -> wenn Query non-empty, skip
-            if (queryLen > 0) return;
-        }
 
-        boolean textMatches = (queryLen == 0) ? true : containsIgnoreCase(fileName, query);
+        boolean textMatches = queryLen == 0 || containsIgnoreCase(fileName, query);
 
         if (!textMatches) {
             return;

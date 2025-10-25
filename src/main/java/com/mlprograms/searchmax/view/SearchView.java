@@ -369,7 +369,8 @@ public class SearchView extends JFrame {
         for (Map.Entry<String, Boolean> en : knownExcludes.entrySet()) if (Boolean.TRUE.equals(en.getValue())) excludes.add(en.getKey());
 
         if (!selectedDrives.isEmpty()) {
-            if ((q == null || q.trim().isEmpty()) && (extensions.isEmpty())) {
+            // Erlaube Suche, wenn Search-Text ODER Extensions ODER mindestens ein include-Filter gesetzt ist
+            if ((q == null || q.trim().isEmpty()) && extensions.isEmpty() && includes.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Bitte einen Suchtext oder Dateiendungen angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
                 return;
             }
@@ -381,8 +382,8 @@ public class SearchView extends JFrame {
             JOptionPane.showMessageDialog(this, "Bitte einen Startordner angeben oder ein Laufwerk auswählen.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if ((q == null || q.trim().isEmpty()) && (extensions.isEmpty())) {
-            JOptionPane.showMessageDialog(this, "Bitte einen Suchtext oder Dateiendungen angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+        if ((q == null || q.trim().isEmpty()) && extensions.isEmpty() && includes.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Bitte einen Suchtext, Dateiendungen oder mindestens einen 'Soll enthalten'-Filter angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
         controller.startSearch(folder.trim(), q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensions, includes, excludes);
