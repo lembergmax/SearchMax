@@ -15,8 +15,8 @@ import java.util.Map;
 
 public class FiltersDialog extends JDialog {
 
-    private final FiltersTableModel includesModel = new FiltersTableModel();
-    private final FiltersTableModel excludesModel = new FiltersTableModel();
+    // Ein einziges Modell für Dateinamen-Filter (mit Flag ob Ausschließen)
+    private final FiltersTableModel filtersModel = new FiltersTableModel();
     private final Map<String, Boolean> initialExtensionsAllow; // initial allow extensions
     private final Map<String, Boolean> initialExtensionsDeny; // initial deny extensions
     private boolean confirmed = false;
@@ -32,7 +32,7 @@ public class FiltersDialog extends JDialog {
                 if (k == null) continue;
                 String t = k.trim();
                 if (t.isEmpty()) continue;
-                includesModel.addEntry(t, enabled);
+                filtersModel.addEntry(t, enabled, false);
             }
         }
         if (initialExcludes != null) {
@@ -42,7 +42,7 @@ public class FiltersDialog extends JDialog {
                 if (k == null) continue;
                 String t = k.trim();
                 if (t.isEmpty()) continue;
-                excludesModel.addEntry(t, enabled);
+                filtersModel.addEntry(t, enabled, true);
             }
         }
         initUI();
@@ -62,7 +62,7 @@ public class FiltersDialog extends JDialog {
                 if (k == null) continue;
                 String t = k.trim();
                 if (t.isEmpty()) continue;
-                includesModel.addEntry(t, enabled);
+                filtersModel.addEntry(t, enabled, false);
             }
         }
         if (initialExcludes != null) {
@@ -72,7 +72,7 @@ public class FiltersDialog extends JDialog {
                 if (k == null) continue;
                 String t = k.trim();
                 if (t.isEmpty()) continue;
-                excludesModel.addEntry(t, enabled);
+                filtersModel.addEntry(t, enabled, true);
             }
         }
         initUI();
@@ -83,75 +83,43 @@ public class FiltersDialog extends JDialog {
     private void initUI() {
         setLayout(new BorderLayout(8, 8));
 
-        // drei Spalten: Includes | Excludes | Extensions
-        JPanel center = new JPanel(new GridLayout(1, 3, 8, 8));
+        // zwei Spalten: Dateiname-Filter (inkl. Ausschließen) | Extensions
+        JPanel center = new JPanel(new GridLayout(1, 2, 8, 8));
 
-        // Includes
-        JPanel incPanel = new JPanel(new BorderLayout(4, 4));
-        incPanel.setBorder(BorderFactory.createTitledBorder("Dateiname enthält"));
-        JTable incTable = new JTable(includesModel);
-        incTable.setFillsViewportHeight(true);
-        incTable.setRowHeight(24);
+        // Combined Filters Panel
+        JPanel fltPanel = new JPanel(new BorderLayout(4, 4));
+        fltPanel.setBorder(BorderFactory.createTitledBorder("Dateiname-Filter"));
+        JTable fltTable = new JTable(filtersModel);
+        fltTable.setFillsViewportHeight(true);
+        fltTable.setRowHeight(24);
         // Entfernen-Button Spalte Renderer/Editor
-        incTable.getColumnModel().getColumn(includesModel.getRemoveColumnIndex()).setCellRenderer(new ButtonRenderer());
-        incTable.getColumnModel().getColumn(includesModel.getRemoveColumnIndex()).setCellEditor(new ButtonEditor(new JButton("Entfernen"), includesModel));
-        incPanel.add(new JScrollPane(incTable), BorderLayout.CENTER);
+        fltTable.getColumnModel().getColumn(filtersModel.getRemoveColumnIndex()).setCellRenderer(new ButtonRenderer());
+        fltTable.getColumnModel().getColumn(filtersModel.getRemoveColumnIndex()).setCellEditor(new ButtonEditor(new JButton("Entfernen"), filtersModel));
+        fltPanel.add(new JScrollPane(fltTable), BorderLayout.CENTER);
 
-        // Buttons unterhalb (klein) - Hinweis: der einzelne 'Entfernen'-Knopf neben 'Hinzufügen' wurde entfernt
-        JPanel incBtnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
+        // Buttons unterhalb
+        JPanel fltBtnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
         Dimension small = new Dimension(120, 24);
-        JButton incAdd = new JButton("Hinzufügen");
-        incAdd.setPreferredSize(small);
-        JButton incEnableAll = new JButton("Alle aktivieren");
-        incEnableAll.setPreferredSize(small);
-        JButton incDisableAll = new JButton("Alle deaktivieren");
-        incDisableAll.setPreferredSize(small);
-        incBtnBar.add(incAdd);
-        incBtnBar.add(incEnableAll);
-        incBtnBar.add(incDisableAll);
-        incPanel.add(incBtnBar, BorderLayout.SOUTH);
+        JButton fltAdd = new JButton("Hinzufügen");
+        fltAdd.setPreferredSize(small);
+        JButton fltEnableAll = new JButton("Alle aktivieren");
+        fltEnableAll.setPreferredSize(small);
+        JButton fltDisableAll = new JButton("Alle deaktivieren");
+        fltDisableAll.setPreferredSize(small);
+        fltBtnBar.add(fltAdd);
+        fltBtnBar.add(fltEnableAll);
+        fltBtnBar.add(fltDisableAll);
+        fltPanel.add(fltBtnBar, BorderLayout.SOUTH);
 
-        incAdd.addActionListener(e -> {
+        fltAdd.addActionListener(e -> {
             String raw = JOptionPane.showInputDialog(this, "Neues Muster (z.B. Teil des Dateinamens):", "Hinzufügen", JOptionPane.PLAIN_MESSAGE);
             if (raw != null) {
                 String t = raw.trim();
-                if (!t.isEmpty()) includesModel.addEntry(t, true);
+                if (!t.isEmpty()) filtersModel.addEntry(t, true, false);
             }
         });
-        incEnableAll.addActionListener(e -> includesModel.setAllEnabled(true));
-        incDisableAll.addActionListener(e -> includesModel.setAllEnabled(false));
-
-        // Excludes
-        JPanel excPanel = new JPanel(new BorderLayout(4, 4));
-        excPanel.setBorder(BorderFactory.createTitledBorder("Dateiname enthält nicht"));
-        JTable excTable = new JTable(excludesModel);
-        excTable.setFillsViewportHeight(true);
-        excTable.setRowHeight(24);
-        excTable.getColumnModel().getColumn(excludesModel.getRemoveColumnIndex()).setCellRenderer(new ButtonRenderer());
-        excTable.getColumnModel().getColumn(excludesModel.getRemoveColumnIndex()).setCellEditor(new ButtonEditor(new JButton("Entfernen"), excludesModel));
-        excPanel.add(new JScrollPane(excTable), BorderLayout.CENTER);
-
-        JPanel excBtnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
-        JButton excAdd = new JButton("Hinzufügen");
-        excAdd.setPreferredSize(small);
-        JButton excEnableAll = new JButton("Alle aktivieren");
-        excEnableAll.setPreferredSize(small);
-        JButton excDisableAll = new JButton("Alle deaktivieren");
-        excDisableAll.setPreferredSize(small);
-        excBtnBar.add(excAdd);
-        excBtnBar.add(excEnableAll);
-        excBtnBar.add(excDisableAll);
-        excPanel.add(excBtnBar, BorderLayout.SOUTH);
-
-        excAdd.addActionListener(e -> {
-            String raw = JOptionPane.showInputDialog(this, "Neues Muster (z.B. Teil des Dateinamens):", "Hinzufügen", JOptionPane.PLAIN_MESSAGE);
-            if (raw != null) {
-                String t = raw.trim();
-                if (!t.isEmpty()) excludesModel.addEntry(t, true);
-            }
-        });
-        excEnableAll.addActionListener(e -> excludesModel.setAllEnabled(true));
-        excDisableAll.addActionListener(e -> excludesModel.setAllEnabled(false));
+        fltEnableAll.addActionListener(e -> filtersModel.setAllEnabled(true));
+        fltDisableAll.addActionListener(e -> filtersModel.setAllEnabled(false));
 
         // ------------------ Extensions Panel ------------------
         JPanel extPanel = new JPanel(new BorderLayout(4,4));
@@ -245,9 +213,8 @@ public class FiltersDialog extends JDialog {
         extEnableAll.addActionListener(e -> extModel.setAllEnabled(true));
         extDisableAll.addActionListener(e -> extModel.setAllEnabled(false));
 
-        // add the extensions panel as third column
-        center.add(incPanel);
-        center.add(excPanel);
+        // add the two panels
+        center.add(fltPanel);
         center.add(extPanel);
         add(center, BorderLayout.CENTER);
 
@@ -292,25 +259,25 @@ public class FiltersDialog extends JDialog {
 
     public Map<String, Boolean> getIncludesMap() {
         Map<String, Boolean> out = new LinkedHashMap<>();
-        for (FiltersTableModel.Entry en : includesModel.getEntries()) out.put(en.pattern, en.enabled);
+        for (FiltersTableModel.Entry en : filtersModel.getEntries()) if (!en.exclude) out.put(en.pattern, en.enabled);
         return out;
     }
 
     public Map<String, Boolean> getIncludesCaseMap() {
         Map<String, Boolean> out = new LinkedHashMap<>();
-        for (FiltersTableModel.Entry en : includesModel.getEntries()) out.put(en.pattern, en.caseSensitive);
+        for (FiltersTableModel.Entry en : filtersModel.getEntries()) if (!en.exclude) out.put(en.pattern, en.caseSensitive);
         return out;
     }
 
     public Map<String, Boolean> getExcludesMap() {
         Map<String, Boolean> out = new LinkedHashMap<>();
-        for (FiltersTableModel.Entry en : excludesModel.getEntries()) out.put(en.pattern, en.enabled);
+        for (FiltersTableModel.Entry en : filtersModel.getEntries()) if (en.exclude) out.put(en.pattern, en.enabled);
         return out;
     }
 
     public Map<String, Boolean> getExcludesCaseMap() {
         Map<String, Boolean> out = new LinkedHashMap<>();
-        for (FiltersTableModel.Entry en : excludesModel.getEntries()) out.put(en.pattern, en.caseSensitive);
+        for (FiltersTableModel.Entry en : filtersModel.getEntries()) if (en.exclude) out.put(en.pattern, en.caseSensitive);
         return out;
     }
 
@@ -327,24 +294,32 @@ public class FiltersDialog extends JDialog {
             boolean enabled;
             String pattern;
             boolean caseSensitive;
+            boolean exclude;
 
-            Entry(boolean enabled, String pattern) {
+            Entry(boolean enabled, String pattern, boolean exclude) {
                 this.enabled = enabled;
                 this.pattern = pattern;
+                this.exclude = exclude;
             }
         }
 
         private final List<Entry> entries = new ArrayList<>();
-        // Spalten: Aktiv, Muster, Groß/Klein beachten, Entfernen
-        private final String[] cols = {"Aktiv","Muster","Groß-/Kleinschreibung beachten",""};
+        // Spalten: Aktiv, Muster, Groß/Klein beachten, Ausschließen, Entfernen
+        private final String[] cols = {"Aktiv","Muster","Groß-/Kleinschreibung beachten","Ausschließen",""};
 
         public List<Entry> getEntries() {
             return entries;
         }
 
         public void addEntry(String p, boolean enabled) {
+            addEntry(p, enabled, false);
+        }
+
+        public void addEntry(String p, boolean enabled, boolean exclude) {
             for (Entry e : entries) if (e.pattern.equals(p)) return;
-            entries.add(new Entry(enabled, p));
+            Entry ne = new Entry(enabled, p, exclude);
+            ne.caseSensitive = false;
+            entries.add(ne);
             fireTableDataChanged();
         }
 
@@ -377,14 +352,14 @@ public class FiltersDialog extends JDialog {
 
         @Override
         public Class<?> getColumnClass(int columnIndex) {
-            if (columnIndex == 0 || columnIndex == 2) return Boolean.class;
+            if (columnIndex == 0 || columnIndex == 2 || columnIndex == 3) return Boolean.class;
             return columnIndex == 1 ? String.class : Object.class;
         }
 
         @Override
         public boolean isCellEditable(int rowIndex, int columnIndex) {
-            // Aktiv und Muster und Case sind editierbar; letzte Spalte ist Entfernen-Button
-            return columnIndex == 0 || columnIndex == 1 || columnIndex == 2 || columnIndex == 3;
+            // Aktiv, Muster, Case, Ausschließen editierbar; letzte Spalte ist Entfernen-Button
+            return columnIndex == 0 || columnIndex == 1 || columnIndex == 2 || columnIndex == 3 || columnIndex == 4;
         }
 
         @Override
@@ -394,6 +369,7 @@ public class FiltersDialog extends JDialog {
                 case 0: return e.enabled;
                 case 1: return e.pattern;
                 case 2: return e.caseSensitive;
+                case 3: return e.exclude;
                 default: return "Entfernen";
             }
         }
@@ -421,13 +397,16 @@ public class FiltersDialog extends JDialog {
             } else if (columnIndex == 2 && aValue instanceof Boolean) {
                 e.caseSensitive = (Boolean) aValue;
                 fireTableCellUpdated(rowIndex, columnIndex);
-            } else if (columnIndex == 3) {
+            } else if (columnIndex == 3 && aValue instanceof Boolean) {
+                e.exclude = (Boolean) aValue;
+                fireTableCellUpdated(rowIndex, columnIndex);
+            } else if (columnIndex == 4) {
                 // Entfernen über Editor/Renderer
                 removeAt(rowIndex);
             }
         }
 
-        public int getRemoveColumnIndex() { return 3; }
+        public int getRemoveColumnIndex() { return 4; }
     }
 
     // Button Renderer und Editor für die Entfernen-Spalte
