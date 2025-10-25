@@ -47,6 +47,9 @@ public class SearchView extends JFrame {
     // Bekannte Include/Exclude Filter für Dateinamen
     private final Map<String, Boolean> knownIncludes = new LinkedHashMap<>();
     private final Map<String, Boolean> knownExcludes = new LinkedHashMap<>();
+    // Case-Flags pro Muster
+    private final Map<String, Boolean> knownIncludesCase = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownExcludesCase = new LinkedHashMap<>();
 
     public SearchView(SearchController controller, SearchModel model) {
         super("SearchMax - Desktop");
@@ -301,8 +304,15 @@ public class SearchView extends JFrame {
         if (dlg.isConfirmed()) {
             Map<String, Boolean> inc = dlg.getIncludesMap();
             Map<String, Boolean> exc = dlg.getExcludesMap();
+            Map<String, Boolean> incCase = dlg.getIncludesCaseMap();
+            Map<String, Boolean> excCase = dlg.getExcludesCaseMap();
+            Map<String, Boolean> exts = dlg.getExtensionsMap();
             knownIncludes.clear(); knownIncludes.putAll(inc);
             knownExcludes.clear(); knownExcludes.putAll(exc);
+            knownIncludesCase.clear(); knownIncludesCase.putAll(incCase);
+            knownExcludesCase.clear(); knownExcludesCase.putAll(excCase);
+            // Update knownExtensions with dialog's extensions (preserve map)
+            knownExtensions.clear(); knownExtensions.putAll(exts);
         }
     }
 
@@ -314,11 +324,25 @@ public class SearchView extends JFrame {
         // Build extensions list from knownExtensions (only active ones)
         java.util.List<String> extensions = new ArrayList<>();
         for (Map.Entry<String, Boolean> en : knownExtensions.entrySet()) if (Boolean.TRUE.equals(en.getValue())) extensions.add(en.getKey());
-        // Build include/exclude lists (only active ones)
+        // Build include/exclude lists (only active ones) and case maps
         java.util.List<String> includes = new ArrayList<>();
+        java.util.Map<String, Boolean> includesCase = new java.util.LinkedHashMap<>();
         java.util.List<String> excludes = new ArrayList<>();
-        for (Map.Entry<String, Boolean> en : knownIncludes.entrySet()) if (Boolean.TRUE.equals(en.getValue())) includes.add(en.getKey());
-        for (Map.Entry<String, Boolean> en : knownExcludes.entrySet()) if (Boolean.TRUE.equals(en.getValue())) excludes.add(en.getKey());
+        java.util.Map<String, Boolean> excludesCase = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, Boolean> en : knownIncludes.entrySet()) {
+            if (Boolean.TRUE.equals(en.getValue())) {
+                String key = en.getKey();
+                includes.add(key);
+                includesCase.put(key, Boolean.TRUE.equals(knownIncludesCase.get(key)));
+            }
+        }
+        for (Map.Entry<String, Boolean> en : knownExcludes.entrySet()) {
+            if (Boolean.TRUE.equals(en.getValue())) {
+                String key = en.getKey();
+                excludes.add(key);
+                excludesCase.put(key, Boolean.TRUE.equals(knownExcludesCase.get(key)));
+            }
+        }
 
         if (!selectedDrives.isEmpty()) {
             // Erlaube Suche, wenn Search-Text ODER Extensions ODER mindestens ein include-Filter gesetzt ist
@@ -326,7 +350,7 @@ public class SearchView extends JFrame {
                 JOptionPane.showMessageDialog(this, "Bitte einen Suchtext oder Dateiendungen angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            controller.startSearch("", q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensions, includes, excludes);
+            controller.startSearch("", q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensions, includes, includesCase, excludes, excludesCase);
             return;
         }
         // Kein Laufwerk ausgewählt, Ordner muss angegeben werden
@@ -338,7 +362,7 @@ public class SearchView extends JFrame {
             JOptionPane.showMessageDialog(this, "Bitte einen Suchtext, Dateiendungen oder mindestens einen 'Soll enthalten'-Filter angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        controller.startSearch(folder.trim(), q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensions, includes, excludes);
+        controller.startSearch(folder.trim(), q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensions, includes, includesCase, excludes, excludesCase);
     }
 
     private void onCancel() {

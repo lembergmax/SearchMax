@@ -32,22 +32,22 @@ public final class DirectoryTask extends RecursiveAction {
     private final AtomicBoolean cancelled;
     private final boolean caseSensitive;
     private final List<String> extensions; // allowed extensions (lowercase, with dot), null = no restriction
-    private final List<String> includeFilters; // filename must contain at least one (lowercase), null = no restriction
-    private final List<String> excludeFilters; // filename must not contain any of these (lowercase), null = no restriction
+    private final List<String> includeFilters; // filename must contain at least one, null = no restriction
+    private final Map<String,Boolean> includeCaseMap; // per-pattern case sensitivity
+    private final List<String> excludeFilters; // filename must not contain any of these, null = no restriction
+    private final Map<String,Boolean> excludeCaseMap;
 
     @SuppressWarnings("unused")
     public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, boolean caseSensitive) {
-        this(directoryPath, result, matchCount, query, startNano, emitter, new AtomicBoolean(false), caseSensitive, null, null, null);
+        this(directoryPath, result, matchCount, query, startNano, emitter, new AtomicBoolean(false), caseSensitive, null, null, null, null, null);
     }
 
-    // Neuer Konstruktor, der ein externes Abbruch-Flag verwendet
     @SuppressWarnings("unused")
     public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive) {
-        this(directoryPath, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, null, null, null);
+        this(directoryPath, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, null, null, null, null, null);
     }
 
-    // Vollständiger Konstruktor mit Extension-Filter
-    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive, List<String> extensions, List<String> includeFilters, List<String> excludeFilters) {
+    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive, List<String> extensions, List<String> includeFilters, Map<String,Boolean> includeCaseMap, List<String> excludeFilters, Map<String,Boolean> excludeCaseMap) {
         this.directoryPath = directoryPath;
         this.result = result == null ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -58,20 +58,10 @@ public final class DirectoryTask extends RecursiveAction {
         this.cancelled = cancelled == null ? new AtomicBoolean(false) : cancelled;
         this.caseSensitive = caseSensitive;
         this.extensions = (extensions == null || extensions.isEmpty()) ? null : new ArrayList<>(extensions);
-        this.includeFilters = (includeFilters == null || includeFilters.isEmpty()) ? null : normalizeList(includeFilters);
-        this.excludeFilters = (excludeFilters == null || excludeFilters.isEmpty()) ? null : normalizeList(excludeFilters);
-    }
-
-    private List<String> normalizeList(List<String> src) {
-        List<String> out = new ArrayList<>();
-        for (String s : src) {
-            if (s == null) continue;
-            String t = s.trim();
-            if (t.isEmpty()) continue;
-            if (!caseSensitive) t = t.toLowerCase(Locale.ROOT);
-            out.add(t);
-        }
-        return out.isEmpty() ? null : out;
+        this.includeFilters = (includeFilters == null || includeFilters.isEmpty()) ? null : new ArrayList<>(includeFilters);
+        this.includeCaseMap = (includeCaseMap == null || includeCaseMap.isEmpty()) ? null : new HashMap<>(includeCaseMap);
+        this.excludeFilters = (excludeFilters == null || excludeFilters.isEmpty()) ? null : new ArrayList<>(excludeFilters);
+        this.excludeCaseMap = (excludeCaseMap == null || excludeCaseMap.isEmpty()) ? null : new HashMap<>(excludeCaseMap);
     }
 
     @Override
@@ -93,7 +83,7 @@ public final class DirectoryTask extends RecursiveAction {
                         if (isSystemDirectory(entry)) {
                             continue;
                         }
-                        subtasks.add(new DirectoryTask(entry, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, extensions, includeFilters, excludeFilters));
+                        subtasks.add(new DirectoryTask(entry, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, extensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap));
                         if (subtasks.size() >= CHUNK_SIZE) {
                             invokeAll(new ArrayList<>(subtasks));
                             subtasks.clear();
@@ -141,45 +131,43 @@ public final class DirectoryTask extends RecursiveAction {
             return;
         }
 
-        // Prüfe includeFilters: falls gesetzt, Dateiname muss mindestens einen der Strings enthalten
+        // include-filters: at least one must match
         if (includeFilters != null && !includeFilters.isEmpty()) {
             boolean any = false;
-            String cmp = caseSensitive ? fileName : fileName.toLowerCase(Locale.ROOT);
             for (String inc : includeFilters) {
                 if (inc == null || inc.isEmpty()) continue;
-                if (cmp.contains(caseSensitive ? inc : inc.toLowerCase(Locale.ROOT))) {
-                    any = true;
-                    break;
+                boolean patCase = includeCaseMap != null && Boolean.TRUE.equals(includeCaseMap.get(inc));
+                if (patCase) {
+                    if (fileName.contains(inc)) { any = true; break; }
+                } else {
+                    if (fileName.toLowerCase(Locale.ROOT).contains(inc.toLowerCase(Locale.ROOT))) { any = true; break; }
                 }
             }
             if (!any) return;
         }
 
-        // Prüfe excludeFilters: falls gesetzt, Dateiname darf keinen der Strings enthalten
+        // exclude-filters: none may match
         if (excludeFilters != null && !excludeFilters.isEmpty()) {
-            String cmp = caseSensitive ? fileName : fileName.toLowerCase(Locale.ROOT);
             for (String exc : excludeFilters) {
                 if (exc == null || exc.isEmpty()) continue;
-                if (cmp.contains(caseSensitive ? exc : exc.toLowerCase(Locale.ROOT))) {
-                    return;
+                boolean patCase = excludeCaseMap != null && Boolean.TRUE.equals(excludeCaseMap.get(exc));
+                if (patCase) {
+                    if (fileName.contains(exc)) return;
+                } else {
+                    if (fileName.toLowerCase(Locale.ROOT).contains(exc.toLowerCase(Locale.ROOT))) return;
                 }
             }
         }
 
-        // Prüfe Dateiendung falls Filter gesetzt ist
+        // extensions
         if (extensions != null && !extensions.isEmpty()) {
             String lower = fileName.toLowerCase(Locale.ROOT);
             boolean extOk = false;
             for (String ex : extensions) {
                 if (ex == null || ex.isEmpty()) continue;
-                if (lower.endsWith(ex)) {
-                    extOk = true;
-                    break;
-                }
+                if (lower.endsWith(ex)) { extOk = true; break; }
             }
-            if (!extOk) {
-                return;
-            }
+            if (!extOk) return;
         }
 
         long elapsedNanos = System.nanoTime() - startNano;
@@ -191,41 +179,26 @@ public final class DirectoryTask extends RecursiveAction {
 
         StringBuilder sb = new StringBuilder(32 + pathStr.length());
         sb.append('[').append(whole).append('.');
-        if (cents < 10) {
-            sb.append('0');
-        }
+        if (cents < 10) sb.append('0');
         sb.append(cents).append(" s] ").append(pathStr);
         String formatted = sb.toString();
 
         result.add(formatted);
-        if (matchCount != null) {
-            matchCount.incrementAndGet();
-        }
+        if (matchCount != null) matchCount.incrementAndGet();
         if (emitter != null) {
-            try {
-                emitter.accept(formatted);
-            } catch (Exception e) {
-                LOGGER.log(Level.FINE, "Emitter-Consumer warf eine Ausnahme für Datei " + filePath + ": " + e.getMessage());
-            }
+            try { emitter.accept(formatted); } catch (Exception e) { LOGGER.log(Level.FINE, "Emitter-Consumer warf eine Ausnahme für Datei " + filePath + ": " + e.getMessage()); }
         }
     }
 
     private boolean containsIgnoreCase(final String src, final String target) {
-        if (target == null || target.isEmpty()) {
-            return true;
-        }
-        if (src == null || src.length() < target.length()) {
-            return false;
-        }
-
+        if (target == null || target.isEmpty()) return true;
+        if (src == null || src.length() < target.length()) return false;
         final int sl = src.length();
         final int tl = target.length();
         final int max = sl - tl;
         final boolean ignoreCase = !caseSensitive;
         for (int i = 0; i <= max; i++) {
-            if (src.regionMatches(ignoreCase, i, target, 0, tl)) {
-                return true;
-            }
+            if (src.regionMatches(ignoreCase, i, target, 0, tl)) return true;
         }
         return false;
     }
