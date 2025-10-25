@@ -18,7 +18,7 @@ public final class DirectoryTask extends RecursiveAction {
 
     private static final Logger LOGGER = Logger.getLogger(DirectoryTask.class.getName());
 
-    private static final Set<String> SYSTEM_DIR_NAMES = Set.of("system volume information", "$recycle.bin", "found.000", "recycler");
+    private static final Set<String> SYSTEM_DIR_NAMES = new HashSet<>(java.util.Arrays.asList("system volume information", "$recycle.bin", "found.000", "recycler"));
 
     private static final int CHUNK_SIZE = 64;
 
@@ -31,7 +31,8 @@ public final class DirectoryTask extends RecursiveAction {
     private final Consumer<String> emitter;
     private final AtomicBoolean cancelled;
     private final boolean caseSensitive;
-    private final List<String> extensions; // allowed extensions (lowercase, with dot), null = no restriction
+    private final List<String> extensionsAllow; // allowed extensions (lowercase, with dot), null = no restriction
+    private final List<String> extensionsDeny; // denied extensions (lowercase, with dot), null = no restriction
     private final List<String> includeFilters; // filename must contain at least one, null = no restriction
     private final Map<String,Boolean> includeCaseMap; // per-pattern case sensitivity
     private final List<String> excludeFilters; // filename must not contain any of these, null = no restriction
@@ -39,15 +40,15 @@ public final class DirectoryTask extends RecursiveAction {
 
     @SuppressWarnings("unused")
     public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, boolean caseSensitive) {
-        this(directoryPath, result, matchCount, query, startNano, emitter, new AtomicBoolean(false), caseSensitive, null, null, null, null, null);
+        this(directoryPath, result, matchCount, query, startNano, emitter, new AtomicBoolean(false), caseSensitive, null, null, null, null, null, null);
     }
 
     @SuppressWarnings("unused")
     public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive) {
-        this(directoryPath, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, null, null, null, null, null);
+        this(directoryPath, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, null, null, null, null, null, null);
     }
 
-    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive, List<String> extensions, List<String> includeFilters, Map<String,Boolean> includeCaseMap, List<String> excludeFilters, Map<String,Boolean> excludeCaseMap) {
+    public DirectoryTask(Path directoryPath, Collection<String> result, AtomicInteger matchCount, String query, long startNano, Consumer<String> emitter, AtomicBoolean cancelled, boolean caseSensitive, List<String> extensionsAllow, List<String> extensionsDeny, List<String> includeFilters, Map<String,Boolean> includeCaseMap, List<String> excludeFilters, Map<String,Boolean> excludeCaseMap) {
         this.directoryPath = directoryPath;
         this.result = result == null ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -57,7 +58,8 @@ public final class DirectoryTask extends RecursiveAction {
         this.emitter = emitter;
         this.cancelled = cancelled == null ? new AtomicBoolean(false) : cancelled;
         this.caseSensitive = caseSensitive;
-        this.extensions = (extensions == null || extensions.isEmpty()) ? null : new ArrayList<>(extensions);
+        this.extensionsAllow = (extensionsAllow == null || extensionsAllow.isEmpty()) ? null : new ArrayList<>(extensionsAllow);
+        this.extensionsDeny = (extensionsDeny == null || extensionsDeny.isEmpty()) ? null : new ArrayList<>(extensionsDeny);
         this.includeFilters = (includeFilters == null || includeFilters.isEmpty()) ? null : new ArrayList<>(includeFilters);
         this.includeCaseMap = (includeCaseMap == null || includeCaseMap.isEmpty()) ? null : new HashMap<>(includeCaseMap);
         this.excludeFilters = (excludeFilters == null || excludeFilters.isEmpty()) ? null : new ArrayList<>(excludeFilters);
@@ -83,7 +85,7 @@ public final class DirectoryTask extends RecursiveAction {
                         if (isSystemDirectory(entry)) {
                             continue;
                         }
-                        subtasks.add(new DirectoryTask(entry, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, extensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap));
+                        subtasks.add(new DirectoryTask(entry, result, matchCount, query, startNano, emitter, cancelled, caseSensitive, extensionsAllow, extensionsDeny, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap));
                         if (subtasks.size() >= CHUNK_SIZE) {
                             invokeAll(new ArrayList<>(subtasks));
                             subtasks.clear();
@@ -159,11 +161,17 @@ public final class DirectoryTask extends RecursiveAction {
             }
         }
 
-        // extensions
-        if (extensions != null && !extensions.isEmpty()) {
-            String lower = fileName.toLowerCase(Locale.ROOT);
+        // extensions: deny wins -> if file ends with any denied ext, reject.
+        String lower = fileName.toLowerCase(Locale.ROOT);
+        if (extensionsDeny != null && !extensionsDeny.isEmpty()) {
+            for (String ex : extensionsDeny) {
+                if (ex == null || ex.isEmpty()) continue;
+                if (lower.endsWith(ex)) return; // denied
+            }
+        }
+        if (extensionsAllow != null && !extensionsAllow.isEmpty()) {
             boolean extOk = false;
-            for (String ex : extensions) {
+            for (String ex : extensionsAllow) {
                 if (ex == null || ex.isEmpty()) continue;
                 if (lower.endsWith(ex)) { extOk = true; break; }
             }

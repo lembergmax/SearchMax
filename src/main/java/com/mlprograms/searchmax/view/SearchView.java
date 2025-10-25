@@ -7,7 +7,12 @@ import javax.swing.*;
 import java.awt.*;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
-import java.io.File;
+import java.io.*;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,8 +47,9 @@ public class SearchView extends JFrame {
     private JPanel drivePanel;
     private JCheckBox[] driveCheckBoxes;
 
-    // Bekannte Endungen inkl. Aktiv-Flag (LinkedHashMap für stabile Reihenfolge)
-    private final Map<String, Boolean> knownExtensions = new LinkedHashMap<>();
+    // Bekannte Endungen: Allow und Deny (LinkedHashMap für stabile Reihenfolge)
+    private final Map<String, Boolean> knownExtensionsAllow = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownExtensionsDeny = new LinkedHashMap<>();
     // Bekannte Include/Exclude Filter für Dateinamen
     private final Map<String, Boolean> knownIncludes = new LinkedHashMap<>();
     private final Map<String, Boolean> knownExcludes = new LinkedHashMap<>();
@@ -55,9 +61,59 @@ public class SearchView extends JFrame {
         super("SearchMax - Desktop");
         this.controller = controller;
         this.model = model;
-        // knownExtensions bleibt initial leer; Verwaltung über den Extensions-Dialog (kein Textfeld mehr)
+        // Lade ggf. gespeicherte Endungen (allow / deny)
+        loadExtensionsFromSettings();
         initUI();
         bindModel();
+    }
+
+    // Pfad zur Settings-Datei im user.home
+    private final Path settingsFile = Paths.get(System.getProperty("user.home"), ".searchmax.properties");
+
+    private void loadExtensionsFromSettings() {
+        try {
+            if (!Files.exists(settingsFile)) return;
+            java.util.Properties p = new java.util.Properties();
+            try (InputStream is = Files.newInputStream(settingsFile)) {
+                p.load(is);
+            }
+            for (String name : p.stringPropertyNames()) {
+                if (!name.startsWith("ext.")) continue;
+                // name like ext.allow.%ENC% or ext.deny.%ENC%
+                String rest = name.substring(4);
+                boolean isAllow = rest.startsWith("allow.");
+                boolean isDeny = rest.startsWith("deny.");
+                String enc = rest.substring(isAllow ? 6 : (isDeny ? 5 : 0));
+                String ext = URLDecoder.decode(enc, "UTF-8");
+                String val = p.getProperty(name);
+                boolean enabled = Boolean.parseBoolean(val);
+                if (isAllow) knownExtensionsAllow.put(ext, enabled);
+                else if (isDeny) knownExtensionsDeny.put(ext, enabled);
+            }
+        } catch (Exception e) {
+            System.err.println("Warn: konnte Einstellungen nicht laden: " + e.getMessage());
+        }
+    }
+
+    private void saveExtensionsToSettings() {
+        try {
+            java.util.Properties p = new java.util.Properties();
+            // allow
+            for (Map.Entry<String, Boolean> en : knownExtensionsAllow.entrySet()) {
+                String key = "ext.allow." + URLEncoder.encode(en.getKey(), "UTF-8");
+                p.setProperty(key, Boolean.TRUE.equals(en.getValue()) ? "true" : "false");
+            }
+            // deny
+            for (Map.Entry<String, Boolean> en : knownExtensionsDeny.entrySet()) {
+                String key = "ext.deny." + URLEncoder.encode(en.getKey(), "UTF-8");
+                p.setProperty(key, Boolean.TRUE.equals(en.getValue()) ? "true" : "false");
+            }
+            try (OutputStream os = Files.newOutputStream(settingsFile)) {
+                p.store(os, "SearchMax settings - extensions");
+            }
+        } catch (Exception e) {
+            System.err.println("Warn: konnte Einstellungen nicht speichern: " + e.getMessage());
+        }
     }
 
     private void initUI() {
@@ -80,22 +136,46 @@ public class SearchView extends JFrame {
         JPanel top = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(4, 4, 4, 4);
-        c.gridx = 0; c.gridy = 0; c.anchor = GridBagConstraints.WEST;
+        c.gridx = 0;
+        c.gridy = 0;
+        c.anchor = GridBagConstraints.WEST;
         top.add(new JLabel("Ordner"), c);
-        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; c.weightx = 1.0;
+        c.gridx = 1;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1.0;
         top.add(folderField, c);
-        c.gridx = 2; c.fill = GridBagConstraints.NONE; c.weightx = 0;
+        c.gridx = 2;
+        c.fill = GridBagConstraints.NONE;
+        c.weightx = 0;
         top.add(browseButton, c);
-        c.gridx = 0; c.gridy = 1; c.gridwidth = 3; c.fill = GridBagConstraints.HORIZONTAL;
+        c.gridx = 0;
+        c.gridy = 1;
+        c.gridwidth = 3;
+        c.fill = GridBagConstraints.HORIZONTAL;
         top.add(drivePanel, c);
         c.gridwidth = 1;
-        c.gridx = 0; c.gridy = 2; top.add(new JLabel("Suchtext"), c);
-        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(queryField, c);
-        c.gridx = 2; c.fill = GridBagConstraints.NONE; JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT)); btnPanel.add(caseSensitiveCheck); btnPanel.add(searchButton); btnPanel.add(cancelButton); top.add(btnPanel, c);
+        c.gridx = 0;
+        c.gridy = 2;
+        top.add(new JLabel("Suchtext"), c);
+        c.gridx = 1;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        top.add(queryField, c);
+        c.gridx = 2;
+        c.fill = GridBagConstraints.NONE;
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.add(caseSensitiveCheck);
+        btnPanel.add(searchButton);
+        btnPanel.add(cancelButton);
+        top.add(btnPanel, c);
 
         // Namensfilter-Management
-        c.gridx = 0; c.gridy = 3; c.fill = GridBagConstraints.NONE; top.add(new JLabel("Namensfilter (optional)"), c);
-        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(manageFiltersButton, c);
+        c.gridx = 0;
+        c.gridy = 3;
+        c.fill = GridBagConstraints.NONE;
+        top.add(new JLabel("Namensfilter (optional)"), c);
+        c.gridx = 1;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        top.add(manageFiltersButton, c);
 
         JPanel center = new JPanel(new BorderLayout());
         resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -269,7 +349,7 @@ public class SearchView extends JFrame {
 
         // Falls bereits ein Pfad im Textfeld steht, starte dort
         String currentPath = folderField.getText();
-        if (currentPath != null && !currentPath.isBlank()) {
+        if (currentPath != null && !currentPath.trim().isEmpty()) {
             File currentDir = new File(currentPath);
             if (currentDir.exists() && currentDir.isDirectory()) {
                 chooser.setCurrentDirectory(currentDir);
@@ -299,20 +379,30 @@ public class SearchView extends JFrame {
     }
 
     private void onManageFilters() {
-        FiltersDialog dlg = new FiltersDialog(this, knownIncludes, knownExcludes);
+        FiltersDialog dlg = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny);
         dlg.setVisible(true);
         if (dlg.isConfirmed()) {
             Map<String, Boolean> inc = dlg.getIncludesMap();
             Map<String, Boolean> exc = dlg.getExcludesMap();
             Map<String, Boolean> incCase = dlg.getIncludesCaseMap();
             Map<String, Boolean> excCase = dlg.getExcludesCaseMap();
-            Map<String, Boolean> exts = dlg.getExtensionsMap();
-            knownIncludes.clear(); knownIncludes.putAll(inc);
-            knownExcludes.clear(); knownExcludes.putAll(exc);
-            knownIncludesCase.clear(); knownIncludesCase.putAll(incCase);
-            knownExcludesCase.clear(); knownExcludesCase.putAll(excCase);
-            // Update knownExtensions with dialog's extensions (preserve map)
-            knownExtensions.clear(); knownExtensions.putAll(exts);
+            Map<String, Boolean> extsAllow = dlg.getExtensionsAllowMap();
+            Map<String, Boolean> extsDeny = dlg.getExtensionsDenyMap();
+            knownIncludes.clear();
+            knownIncludes.putAll(inc);
+            knownExcludes.clear();
+            knownExcludes.putAll(exc);
+            knownIncludesCase.clear();
+            knownIncludesCase.putAll(incCase);
+            knownExcludesCase.clear();
+            knownExcludesCase.putAll(excCase);
+            // Update knownExtensionsAllow / knownExtensionsDeny
+            knownExtensionsAllow.clear();
+            knownExtensionsAllow.putAll(extsAllow);
+            knownExtensionsDeny.clear();
+            knownExtensionsDeny.putAll(extsDeny);
+            // Persist immediately
+            saveExtensionsToSettings();
         }
     }
 
@@ -321,9 +411,13 @@ public class SearchView extends JFrame {
         String folder = folderField.getText();
         String q = queryField.getText();
         boolean caseSensitive = caseSensitiveCheck.isSelected();
-        // Build extensions list from knownExtensions (only active ones)
-        java.util.List<String> extensions = new ArrayList<>();
-        for (Map.Entry<String, Boolean> en : knownExtensions.entrySet()) if (Boolean.TRUE.equals(en.getValue())) extensions.add(en.getKey());
+        // Build allow/deny extension lists from knownExtensionsAllow/Deny (only active ones)
+        java.util.List<String> extensionsAllow = new ArrayList<>();
+        java.util.List<String> extensionsDeny = new ArrayList<>();
+        for (Map.Entry<String, Boolean> en : knownExtensionsAllow.entrySet())
+            if (Boolean.TRUE.equals(en.getValue())) extensionsAllow.add(en.getKey());
+        for (Map.Entry<String, Boolean> en : knownExtensionsDeny.entrySet())
+            if (Boolean.TRUE.equals(en.getValue())) extensionsDeny.add(en.getKey());
         // Build include/exclude lists (only active ones) and case maps
         java.util.List<String> includes = new ArrayList<>();
         java.util.Map<String, Boolean> includesCase = new java.util.LinkedHashMap<>();
@@ -346,11 +440,11 @@ public class SearchView extends JFrame {
 
         if (!selectedDrives.isEmpty()) {
             // Erlaube Suche, wenn Search-Text ODER Extensions ODER mindestens ein include-Filter gesetzt ist
-            if ((q == null || q.trim().isEmpty()) && extensions.isEmpty() && includes.isEmpty()) {
+            if ((q == null || q.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Bitte einen Suchtext oder Dateiendungen angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            controller.startSearch("", q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensions, includes, includesCase, excludes, excludesCase);
+            controller.startSearch("", q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
             return;
         }
         // Kein Laufwerk ausgewählt, Ordner muss angegeben werden
@@ -358,11 +452,11 @@ public class SearchView extends JFrame {
             JOptionPane.showMessageDialog(this, "Bitte einen Startordner angeben oder ein Laufwerk auswählen.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if ((q == null || q.trim().isEmpty()) && extensions.isEmpty() && includes.isEmpty()) {
+        if ((q == null || q.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Bitte einen Suchtext, Dateiendungen oder mindestens einen 'Soll enthalten'-Filter angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        controller.startSearch(folder.trim(), q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensions, includes, includesCase, excludes, excludesCase);
+        controller.startSearch(folder.trim(), q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
     }
 
     private void onCancel() {
@@ -375,5 +469,4 @@ public class SearchView extends JFrame {
             updateFolderFieldState();
         }
     }
-
 }

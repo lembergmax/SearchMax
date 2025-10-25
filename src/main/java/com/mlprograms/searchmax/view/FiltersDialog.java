@@ -17,10 +17,44 @@ public class FiltersDialog extends JDialog {
 
     private final FiltersTableModel includesModel = new FiltersTableModel();
     private final FiltersTableModel excludesModel = new FiltersTableModel();
+    private final Map<String, Boolean> initialExtensionsAllow; // initial allow extensions
+    private final Map<String, Boolean> initialExtensionsDeny; // initial deny extensions
     private boolean confirmed = false;
 
     public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes) {
         super(owner, "Dateiname-Filter verwalten", true);
+        this.initialExtensionsAllow = null;
+        this.initialExtensionsDeny = null;
+        if (initialIncludes != null) {
+            for (Map.Entry<String, Boolean> e : initialIncludes.entrySet()) {
+                String k = e.getKey();
+                boolean enabled = Boolean.TRUE.equals(e.getValue());
+                if (k == null) continue;
+                String t = k.trim();
+                if (t.isEmpty()) continue;
+                includesModel.addEntry(t, enabled);
+            }
+        }
+        if (initialExcludes != null) {
+            for (Map.Entry<String, Boolean> e : initialExcludes.entrySet()) {
+                String k = e.getKey();
+                boolean enabled = Boolean.TRUE.equals(e.getValue());
+                if (k == null) continue;
+                String t = k.trim();
+                if (t.isEmpty()) continue;
+                excludesModel.addEntry(t, enabled);
+            }
+        }
+        initUI();
+        pack();
+        setLocationRelativeTo(owner);
+    }
+
+    // Neuer Konstruktor mit initialen Endungen
+    public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny) {
+        super(owner, "Dateiname-Filter verwalten", true);
+        this.initialExtensionsAllow = initialExtensionsAllow == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsAllow);
+        this.initialExtensionsDeny = initialExtensionsDeny == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsDeny);
         if (initialIncludes != null) {
             for (Map.Entry<String, Boolean> e : initialIncludes.entrySet()) {
                 String k = e.getKey();
@@ -122,27 +156,60 @@ public class FiltersDialog extends JDialog {
         // ------------------ Extensions Panel ------------------
         JPanel extPanel = new JPanel(new BorderLayout(4,4));
         extPanel.setBorder(BorderFactory.createTitledBorder("Dateiendungen (Suffix, z.B. .txt)"));
-        // Internes TableModel für Endungen (ähnlich wie in ExtensionsDialog)
+        // Internes TableModel für Endungen (Allow / Exclude)
         class ExtModel extends AbstractTableModel {
-            class E { boolean enabled; String ext; E(boolean en, String ex) { this.enabled = en; this.ext = ex; } }
+            class E { boolean enabled; String ext; boolean exclude; E(boolean en, String ex, boolean exl) { this.enabled = en; this.ext = ex; this.exclude = exl; } }
             private final List<E> list = new ArrayList<>();
-            private final String[] cols = {"Aktiv","Endung",""};
+            // Spalten: Aktiv, Endung, Ausschließen, Entfernen
+            private final String[] cols = {"Aktiv","Endung","Ausschließen",""};
             public List<E> getEntries() { return list; }
-            public void add(String ex, boolean en) { for (E e : list) if (e.ext.equals(ex)) return; list.add(new E(en, ex)); fireTableDataChanged(); }
+            public void add(String ex, boolean en) { for (E e : list) if (e.ext.equals(ex)) return; list.add(new E(en, ex, false)); fireTableDataChanged(); }
             public void removeAt(int i) { if (i>=0 && i<list.size()) { list.remove(i); fireTableDataChanged(); } }
             public void setAllEnabled(boolean en) { for (E e : list) e.enabled = en; fireTableDataChanged(); }
             public boolean contains(String ex) { for (E e : list) if (e.ext.equals(ex)) return true; return false; }
             @Override public int getRowCount() { return list.size(); }
             @Override public int getColumnCount() { return cols.length; }
             @Override public String getColumnName(int c) { return cols[c]; }
-            @Override public Class<?> getColumnClass(int c) { return c==0?Boolean.class:(c==1?String.class:Object.class); }
-            @Override public boolean isCellEditable(int r,int c) { return c==0||c==1||c==2; }
-            @Override public Object getValueAt(int r,int c) { E e = list.get(r); if (c==0) return e.enabled; if (c==1) return e.ext; return "Entfernen"; }
-            @Override public void setValueAt(Object val,int r,int c) { if (r<0||r>=list.size()) return; E e=list.get(r); if (c==0 && val instanceof Boolean) { e.enabled=(Boolean)val; fireTableCellUpdated(r,c); } else if (c==1 && val instanceof String) { String v=((String)val).trim().toLowerCase(); if (v.isEmpty()) return; if (!v.startsWith(".")) v = "."+v; for (int i=0;i<list.size();i++){ if (i==r) continue; if (list.get(i).ext.equals(v)){ JOptionPane.showMessageDialog(null, "Endung existiert bereits.", "Fehler", JOptionPane.WARNING_MESSAGE); return; } } e.ext=v; fireTableCellUpdated(r,c); } else if (c==2) { removeAt(r); } }
-            public int getRemoveColumnIndex() { return 2; }
+            @Override public Class<?> getColumnClass(int c) { return c==0||c==2?Boolean.class:(c==1?String.class:Object.class); }
+            @Override public boolean isCellEditable(int r,int c) { return c==0||c==1||c==2||c==3; }
+            @Override public Object getValueAt(int r,int c) { E e = list.get(r); if (c==0) return e.enabled; if (c==1) return e.ext; if (c==2) return e.exclude; return "Entfernen"; }
+            @Override public void setValueAt(Object val,int r,int c) { if (r<0||r>=list.size()) return; E e=list.get(r); if (c==0 && val instanceof Boolean) { e.enabled=(Boolean)val; fireTableCellUpdated(r,c); } else if (c==1 && val instanceof String) { String v=((String)val).trim().toLowerCase(); if (v.isEmpty()) return; if (!v.startsWith(".")) v = "."+v; for (int i=0;i<list.size();i++){ if (i==r) continue; if (list.get(i).ext.equals(v)){ JOptionPane.showMessageDialog(null, "Endung existiert bereits.", "Fehler", JOptionPane.WARNING_MESSAGE); return; } } e.ext=v; fireTableCellUpdated(r,c); } else if (c==2 && val instanceof Boolean) { e.exclude=(Boolean)val; fireTableCellUpdated(r,c); } else if (c==3) { removeAt(r); } }
+            public int getRemoveColumnIndex() { return 3; }
         }
 
         ExtModel extModel = new ExtModel();
+        // populate extModel from initialExtensionsAllow/initialExtensionsDeny if provided
+        if (initialExtensionsAllow != null && !initialExtensionsAllow.isEmpty()) {
+            for (Map.Entry<String, Boolean> en : initialExtensionsAllow.entrySet()) {
+                String ex = en.getKey();
+                boolean enabled = Boolean.TRUE.equals(en.getValue());
+                if (ex == null) continue;
+                String t = ex.trim().toLowerCase();
+                if (t.isEmpty()) continue;
+                if (!t.startsWith(".")) t = "." + t;
+                extModel.add(t, enabled);
+            }
+        }
+        if (initialExtensionsDeny != null && !initialExtensionsDeny.isEmpty()) {
+            for (Map.Entry<String, Boolean> en : initialExtensionsDeny.entrySet()) {
+                String ex = en.getKey();
+                boolean enabled = Boolean.TRUE.equals(en.getValue());
+                if (ex == null) continue;
+                String t = ex.trim().toLowerCase();
+                if (t.isEmpty()) continue;
+                if (!t.startsWith(".")) t = "." + t;
+                // if already present, mark exclude; else add as exclude
+                boolean found = false;
+                for (ExtModel.E e : extModel.getEntries()) {
+                    if (e.ext.equals(t)) { e.exclude = true; e.enabled = enabled; found = true; break; }
+                }
+                if (!found) {
+                    ExtModel.E ne = extModel.new E(enabled, t, true);
+                    extModel.getEntries().add(ne);
+                    extModel.fireTableDataChanged();
+                }
+            }
+        }
         JTable extTable = new JTable(extModel);
         extTable.setFillsViewportHeight(true);
         extTable.setRowHeight(24);
@@ -184,12 +251,17 @@ public class FiltersDialog extends JDialog {
         center.add(extPanel);
         add(center, BorderLayout.CENTER);
 
-        // store getter helpers for extensions
-        this.extensionsGetter = () -> {
-            Map<String, Boolean> out = new LinkedHashMap<>();
-            for (ExtModel.E en : extModel.getEntries()) out.put(en.ext, en.enabled);
-            return out;
-        };
+        // store getter helpers for extensions (allow / deny)
+        this.extensionsAllowGetter = () -> {
+             Map<String, Boolean> out = new LinkedHashMap<>();
+             for (ExtModel.E en : extModel.getEntries()) if (!en.exclude) out.put(en.ext, en.enabled);
+             return out;
+         };
+         this.extensionsDenyGetter = () -> {
+             Map<String, Boolean> out = new LinkedHashMap<>();
+             for (ExtModel.E en : extModel.getEntries()) if (en.exclude) out.put(en.ext, en.enabled);
+             return out;
+         };
 
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton ok = new JButton("OK");
@@ -242,12 +314,12 @@ public class FiltersDialog extends JDialog {
         return out;
     }
 
-    // Extensions getter (gesetzt in initUI)
-    private java.util.function.Supplier<Map<String,Boolean>> extensionsGetter = () -> new LinkedHashMap<>();
+    // Extensions getters (gesetzt in initUI)
+    private java.util.function.Supplier<Map<String,Boolean>> extensionsAllowGetter = () -> new LinkedHashMap<>();
+    private java.util.function.Supplier<Map<String,Boolean>> extensionsDenyGetter = () -> new LinkedHashMap<>();
 
-    public Map<String, Boolean> getExtensionsMap() {
-        return extensionsGetter.get();
-    }
+    public Map<String, Boolean> getExtensionsAllowMap() { return extensionsAllowGetter.get(); }
+    public Map<String, Boolean> getExtensionsDenyMap() { return extensionsDenyGetter.get(); }
 
     // TableModel
     static class FiltersTableModel extends AbstractTableModel {
