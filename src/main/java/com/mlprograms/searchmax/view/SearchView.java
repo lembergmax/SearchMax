@@ -53,12 +53,22 @@ public final class SearchView extends JFrame {
     private void initUI() {
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
+        // Ensure no stray glass pane is intercepting mouse events
+        java.awt.Component glass = getGlassPane();
+        if (glass instanceof javax.swing.JComponent gp) {
+            gp.setVisible(false);
+            gp.setEnabled(false);
+            gp.setOpaque(false);
+            gp.setCursor(java.awt.Cursor.getDefaultCursor());
+        }
+
         getContentPane().add(topPanel, java.awt.BorderLayout.NORTH);
         getContentPane().add(centerPanel, java.awt.BorderLayout.CENTER);
         getContentPane().add(bottomPanel, java.awt.BorderLayout.SOUTH);
 
         topPanel.addListeners();
 
+        ensureInteractive();
         updateButtons(false);
 
         pack();
@@ -66,6 +76,45 @@ public final class SearchView extends JFrame {
         setSize(800, 600);
 
         setLocationRelativeTo(null);
+
+        // Focus the query field initially
+        SwingUtilities.invokeLater(() -> topPanel.getQueryField().requestFocusInWindow());
+    }
+
+    private void ensureInteractive() {
+        try {
+            // Ensure window and root are interactive
+            setEnabled(true);
+            setFocusableWindowState(true);
+
+            final javax.swing.JRootPane root = getRootPane();
+            if (root != null) {
+                root.setEnabled(true);
+                root.setVisible(true);
+            }
+
+            final javax.swing.JLayeredPane layered = getLayeredPane();
+            if (layered != null) {
+                layered.setEnabled(true);
+            }
+
+            final java.awt.Container content = getContentPane();
+            if (content != null) {
+                enableTree(content);
+            }
+        } catch (Exception ignore) {
+            // defensive only
+        }
+    }
+
+    private void enableTree(java.awt.Component c) {
+        if (c == null) return;
+        c.setEnabled(true);
+        if (c instanceof java.awt.Container container) {
+            for (java.awt.Component child : container.getComponents()) {
+                enableTree(child);
+            }
+        }
     }
 
     void onBrowse() {

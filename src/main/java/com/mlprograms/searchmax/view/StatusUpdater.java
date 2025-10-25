@@ -27,7 +27,7 @@ public final class StatusUpdater {
     }
 
     private void updateStatus(String newStatus) {
-        boolean runningNow = SEARCH_RUNNING_TEXT.equals(newStatus);
+        boolean runningNow = newStatus != null && newStatus.startsWith(SEARCH_RUNNING_TEXT);
         if (runningNow) {
             startDotAnimation();
         } else {
