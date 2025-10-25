@@ -27,10 +27,11 @@ public final class SearchService {
         this.pool = new ForkJoinPool(Math.max(1, Runtime.getRuntime().availableProcessors()));
     }
 
-    public void search(final String folderPath, final String queryText, final List<String> drives, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String,Boolean> includesCase, final List<String> excludes, final java.util.Map<String,Boolean> excludesCase) {
+    public void search(final String folderPath, final String queryText, final List<String> drives, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase) {
         if (listener == null) {
-            throw new IllegalArgumentException("listener darf nicht null sein");
+            throw new IllegalArgumentException("Listener darf nicht null sein");
         }
+
         if (drives != null && !drives.isEmpty()) {
             handleSearchSelectedDrives(drives, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
             return;
@@ -61,24 +62,20 @@ public final class SearchService {
         if (searchId == null) {
             return false;
         }
+
         final SearchHandle handle = searches.remove(searchId);
         if (handle == null) {
             return false;
         }
+
         try {
-            // Markiere das Handle als abgebrochen, damit laufende Tasks das erkennen
-            try {
-                handle.getCancelled().set(true);
-            } catch (Exception ignore) {
-                // Ignoriere
-            }
-            // Versuche alle registrierten Tasks abzubrechen
-            final Collection<ForkJoinTask<?>> tasks = handle.getTasks();
-            for (ForkJoinTask<?> t : tasks) {
-                if (t != null) {
-                    t.cancel(true);
+            handle.getCancelled().set(true);
+            for (final ForkJoinTask<?> forkJoinTask : handle.getTasks()) {
+                if (forkJoinTask != null) {
+                    forkJoinTask.cancel(true);
                 }
             }
+
             return true;
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Abbrechen der Suche: " + searchId, e);
@@ -96,26 +93,24 @@ public final class SearchService {
             if (raw == null) {
                 return false;
             }
-            final String t = raw.trim();
-            if (t.isEmpty()) {
+
+            final String trimmedRaw = raw.trim();
+            if (trimmedRaw.isEmpty()) {
                 return false;
             }
-
-            if (t.length() == 1 && Character.isLetter(t.charAt(0))) {
+            if (trimmedRaw.length() == 1 && Character.isLetter(trimmedRaw.charAt(0))) {
                 continue;
             }
-
-            if ((t.length() == 2 && Character.isLetter(t.charAt(0)) && t.charAt(1) == ':') || (t.length() == 3 && Character.isLetter(t.charAt(0)) && t.charAt(1) == ':' && (t.charAt(2) == '\\' || t.charAt(2) == '/'))) {
+            if ((trimmedRaw.length() == 2 && Character.isLetter(trimmedRaw.charAt(0)) && trimmedRaw.charAt(1) == ':') || (trimmedRaw.length() == 3 && Character.isLetter(trimmedRaw.charAt(0)) && trimmedRaw.charAt(1) == ':' && (trimmedRaw.charAt(2) == '\\' || trimmedRaw.charAt(2) == '/'))) {
                 continue;
             }
 
             return false;
         }
-
         return true;
     }
 
-    private void handleSearchAllDrives(final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String,Boolean> includesCase, final List<String> excludes, final java.util.Map<String,Boolean> excludesCase) {
+    private void handleSearchAllDrives(final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase) {
         final File[] roots = File.listRoots();
         if (roots == null || roots.length == 0) {
             listener.onError("Keine Laufwerke gefunden");
@@ -124,29 +119,24 @@ public final class SearchService {
 
         final long startNano = System.nanoTime();
         final String searchId = UUID.randomUUID().toString();
-        final SearchHandle sharedHandle = createSearchHandle(startNano, roots.length);
+        final SearchHandle handle = createSearchHandle(startNano, roots.length);
 
-        searches.put(searchId, sharedHandle);
+        searches.put(searchId, handle);
         listener.onId(searchId);
 
-        for (final File root : roots) {
+        for (File root : roots) {
             final Path rootPath = root.toPath();
             if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
+                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
             } else {
-                sharedHandle.getRemainingTasks().decrementAndGet();
+                handle.getRemainingTasks().decrementAndGet();
             }
         }
 
-        if (sharedHandle.getRemainingTasks().get() <= 0) {
-            final AtomicInteger matches = sharedHandle.getMatchCount();
-            final int total = (matches == null) ? 0 : matches.get();
-            listener.onEnd(String.format("%d Treffer", total));
-            searches.entrySet().removeIf(e -> e.getValue() == sharedHandle);
-        }
+        checkComplete(handle, listener);
     }
 
-    private void handleSearchSelectedDrives(final String folderPathList, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String,Boolean> includesCase, final List<String> excludes, final java.util.Map<String,Boolean> excludesCase) {
+    private void handleSearchSelectedDrives(final String folderPathList, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase) {
         final String[] tokens = folderPathList.split(",");
         if (tokens.length == 0) {
             listener.onError("Keine Laufwerke angegeben");
@@ -155,43 +145,31 @@ public final class SearchService {
 
         final long startNano = System.nanoTime();
         final String searchId = UUID.randomUUID().toString();
-        final SearchHandle sharedHandle = createSearchHandle(startNano, tokens.length);
+        final SearchHandle handle = createSearchHandle(startNano, tokens.length);
 
-        searches.put(searchId, sharedHandle);
+        searches.put(searchId, handle);
         listener.onId(searchId);
 
         for (String raw : tokens) {
             final String t = raw == null ? "" : raw.trim();
             if (t.isEmpty()) {
-                sharedHandle.getRemainingTasks().decrementAndGet();
+                handle.getRemainingTasks().decrementAndGet();
                 continue;
             }
 
-            String normalized = t;
-            if (t.length() == 1 && Character.isLetter(t.charAt(0))) {
-                normalized = t + ":\\";
-            } else if (t.length() == 2 && Character.isLetter(t.charAt(0)) && t.charAt(1) == ':') {
-                normalized = t + "\\";
-            }
-
+            String normalized = normalizeDrivePath(t);
             final Path rootPath = Paths.get(normalized);
             if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
+                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
             } else {
-                sharedHandle.getRemainingTasks().decrementAndGet();
+                handle.getRemainingTasks().decrementAndGet();
             }
         }
 
-        if (sharedHandle.getRemainingTasks().get() <= 0) {
-            final AtomicInteger matches = sharedHandle.getMatchCount();
-            final int total = (matches == null) ? 0 : matches.get();
-            listener.onEnd(String.format("%d Treffer", total));
-            searches.entrySet().removeIf(e -> e.getValue() == sharedHandle);
-        }
+        checkComplete(handle, listener);
     }
 
-    // Neue Methode für die Suche in ausgewählten Laufwerken
-    private void handleSearchSelectedDrives(List<String> drives, String queryText, SearchEventListener listener, boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String,Boolean> includesCase, final List<String> excludes, final java.util.Map<String,Boolean> excludesCase) {
+    private void handleSearchSelectedDrives(final List<String> drives, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase) {
         if (drives == null || drives.isEmpty()) {
             listener.onError("Keine Laufwerke angegeben");
             return;
@@ -199,43 +177,32 @@ public final class SearchService {
 
         final long startNano = System.nanoTime();
         final String searchId = UUID.randomUUID().toString();
-        final SearchHandle sharedHandle = createSearchHandle(startNano, drives.size());
+        final SearchHandle handle = createSearchHandle(startNano, drives.size());
 
-        searches.put(searchId, sharedHandle);
+        searches.put(searchId, handle);
         listener.onId(searchId);
 
         for (String raw : drives) {
             final String t = raw == null ? "" : raw.trim();
             if (t.isEmpty()) {
-                sharedHandle.getRemainingTasks().decrementAndGet();
+                handle.getRemainingTasks().decrementAndGet();
                 continue;
             }
 
-            String normalized = t;
-            if (t.length() == 1 && Character.isLetter(t.charAt(0))) {
-                normalized = t + ":\\";
-            } else if (t.length() == 2 && Character.isLetter(t.charAt(0)) && t.charAt(1) == ':') {
-                normalized = t + "\\";
-            }
-
+            String normalized = normalizeDrivePath(t);
             final Path rootPath = Paths.get(normalized);
             if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, sharedHandle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
+                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
             } else {
-                sharedHandle.getRemainingTasks().decrementAndGet();
+                handle.getRemainingTasks().decrementAndGet();
             }
         }
 
-        if (sharedHandle.getRemainingTasks().get() <= 0) {
-            final AtomicInteger matches = sharedHandle.getMatchCount();
-            final int total = (matches == null) ? 0 : matches.get();
-            listener.onEnd(String.format("%d Treffer", total));
-            searches.entrySet().removeIf(e -> e.getValue() == sharedHandle);
-        }
+        checkComplete(handle, listener);
     }
 
-    private void startSearch(final String folderPath, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String,Boolean> includesCase, final List<String> excludes, final java.util.Map<String,Boolean> excludesCase) {
-        if (folderPath == null || queryText == null || (queryText.isEmpty() && ( (extensionsAllow == null || extensionsAllow.isEmpty()) && (includes == null || includes.isEmpty()) ))) {
+    private void startSearch(final String folderPath, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase) {
+        if (folderPath == null || queryText == null || (queryText.isEmpty() && ((extensionsAllow == null || extensionsAllow.isEmpty()) && (includes == null || includes.isEmpty())))) {
             listener.onError("Ungültige Anfrage");
             return;
         }
@@ -260,45 +227,35 @@ public final class SearchService {
         return new SearchHandle(null, startNano, new AtomicInteger(remainingTasks), new AtomicInteger(0), new ConcurrentLinkedQueue<>());
     }
 
-    private void startSearchTask(final String id, final Path startPath, final String queryText, final SearchHandle searchHandle, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String,Boolean> includesCase, final List<String> excludes, final java.util.Map<String,Boolean> excludesCase) {
-        final Collection<String> results = (searchHandle.getResults() != null) ? searchHandle.getResults() : new ConcurrentLinkedQueue<>();
-        final AtomicInteger matchCount = (searchHandle.getMatchCount() != null) ? searchHandle.getMatchCount() : new AtomicInteger(0);
-
+    private void startSearchTask(final String id, final Path startPath, final String queryText, final SearchHandle handle, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase) {
         final Consumer<String> onMatch = s -> safeSendMatch(listener, s);
 
         ForkJoinTask<?> submitted = pool.submit(() -> {
             try {
-                pool.invoke(new DirectoryTask(startPath, results, matchCount, queryText, searchHandle.getStartNano(), onMatch, searchHandle.getCancelled(), caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase));
+                pool.invoke(new DirectoryTask(startPath, handle.getResults(), handle.getMatchCount(), queryText, handle.getStartNano(), onMatch, handle.getCancelled(), caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase));
             } catch (Throwable t) {
                 LOGGER.log(Level.SEVERE, "Suche fehlgeschlagen (id=" + id + ")", t);
                 safeSendError(listener, "Suche fehlgeschlagen: " + t.getMessage());
             } finally {
-                completeHandle(searchHandle, listener);
+                completeHandle(handle, listener);
             }
         });
 
-        searchHandle.setTask(submitted);
-        // Falls das handle mehrere Tasks verwalten soll (z.B. für mehrere Startpfade), sicherstellen, dass das Task
-        // zur Liste hinzugefügt wird. setTask fügt bereits hinzu; falls zusätzliche Tasks entstehen, kann addTask verwendet werden.
-        searchHandle.addTask(submitted);
+        handle.setTask(submitted);
+        handle.addTask(submitted);
     }
 
     private void completeHandle(final SearchHandle handle, final SearchEventListener listener) {
         try {
-            if (handle != null) {
-                final AtomicInteger remaining = handle.getRemainingTasks();
-                if (remaining == null) {
-                    listener.onEnd("0 Treffer");
-                    return;
-                }
+            if (handle == null) {
+                return;
+            }
 
-                int left = remaining.decrementAndGet();
-                if (left <= 0) {
-                    final AtomicInteger matches = handle.getMatchCount();
-                    final int total = (matches == null) ? 0 : matches.get();
-                    listener.onEnd(String.format("%d Treffer", total));
-                    searches.entrySet().removeIf(e -> e.getValue() == handle);
-                }
+            final int left = handle.getRemainingTasks().decrementAndGet();
+            if (left <= 0) {
+                final int total = handle.getMatchCount().get();
+                listener.onEnd(String.format("%d Treffer", total));
+                searches.entrySet().removeIf(e -> e.getValue() == handle);
             }
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Abschließen des Handles", e);
@@ -319,6 +276,26 @@ public final class SearchService {
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Fehler beim Senden von Error", e);
         }
+    }
+
+    private void checkComplete(SearchHandle handle, SearchEventListener listener) {
+        if (handle.getRemainingTasks().get() <= 0) {
+            final int total = handle.getMatchCount().get();
+            listener.onEnd(String.format("%d Treffer", total));
+            searches.entrySet().removeIf(e -> e.getValue() == handle);
+        }
+    }
+
+    private String normalizeDrivePath(String raw) {
+        if (raw.length() == 1 && Character.isLetter(raw.charAt(0))) {
+            return raw + ":\\";
+        }
+
+        if (raw.length() == 2 && Character.isLetter(raw.charAt(0)) && raw.charAt(1) == ':') {
+            return raw + "\\";
+        }
+
+        return raw;
     }
 
 }

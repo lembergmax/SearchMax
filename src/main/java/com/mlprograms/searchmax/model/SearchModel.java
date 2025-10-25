@@ -1,11 +1,14 @@
 package com.mlprograms.searchmax.model;
 
+import lombok.Getter;
+
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+@Getter
 public class SearchModel {
 
     public static final String PROP_RESULTS = "results";
@@ -47,18 +50,10 @@ public class SearchModel {
         pcs.firePropertyChange(PROP_RESULTS, old, getResults());
     }
 
-    public String getStatus() {
-        return status;
-    }
-
     public void setStatus(String status) {
         String old = this.status;
         this.status = status;
         pcs.firePropertyChange(PROP_STATUS, old, status);
-    }
-
-    public String getId() {
-        return id;
     }
 
     public void setId(String id) {
@@ -68,4 +63,3 @@ public class SearchModel {
     }
 
 }
-
