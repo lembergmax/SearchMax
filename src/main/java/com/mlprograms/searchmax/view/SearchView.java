@@ -6,10 +6,12 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.*;
+import java.awt.*;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.List;
 
 @Slf4j
 @Getter
@@ -48,73 +50,66 @@ public final class SearchView extends JFrame {
 
         initUI();
         bindModel();
+
+        // TODO: irgendwie anders lösen
+        SwingUtilities.invokeLater(() -> {
+            java.util.function.Consumer<Component> attachDoClick = new java.util.function.Consumer<>() {
+                @Override
+                public void accept(Component c) {
+                    if (c instanceof AbstractButton ab) {
+                        // attach once
+                        boolean found = false;
+                        for (java.awt.event.MouseListener ml : ab.getMouseListeners()) {
+                            if (ml.getClass().getName().contains("ForceDoClick")) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            ab.addMouseListener(new java.awt.event.MouseAdapter() {
+                                @Override
+                                public void mouseReleased(java.awt.event.MouseEvent e) {
+                                    // only left button
+                                    if (e.getButton() == java.awt.event.MouseEvent.BUTTON1 && ab.isEnabled()) {
+                                        try {
+                                            System.out.println("[FORCE] mouseReleased -> doClick: " + ab.getClass().getSimpleName() + " text=" + ab.getText());
+                                            ab.doClick();
+                                        } catch (Throwable t) {
+                                            t.printStackTrace();
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    if (c instanceof Container cont) for (Component ch : cont.getComponents()) accept(ch);
+                }
+            };
+            attachDoClick.accept(getContentPane());
+        });
+
+
     }
 
     private void initUI() {
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
-        // Ensure no stray glass pane is intercepting mouse events
-        java.awt.Component glass = getGlassPane();
-        if (glass instanceof javax.swing.JComponent gp) {
-            gp.setVisible(false);
-            gp.setEnabled(false);
-            gp.setOpaque(false);
-            gp.setCursor(java.awt.Cursor.getDefaultCursor());
-        }
-
-        getContentPane().add(topPanel, java.awt.BorderLayout.NORTH);
-        getContentPane().add(centerPanel, java.awt.BorderLayout.CENTER);
-        getContentPane().add(bottomPanel, java.awt.BorderLayout.SOUTH);
+        Container content = getContentPane();
+        content.setLayout(new BorderLayout(6, 6));
+        content.add(topPanel, BorderLayout.NORTH);
+        content.add(centerPanel, BorderLayout.CENTER);
+        content.add(bottomPanel, BorderLayout.SOUTH);
 
         topPanel.addListeners();
-
-        ensureInteractive();
         updateButtons(false);
+        updateFolderFieldState();
 
         pack();
-        setMinimumSize(new java.awt.Dimension(700, 400));
+        setMinimumSize(new Dimension(700, 400));
         setSize(800, 600);
-
         setLocationRelativeTo(null);
 
-        // Focus the query field initially
         SwingUtilities.invokeLater(() -> topPanel.getQueryField().requestFocusInWindow());
-    }
-
-    private void ensureInteractive() {
-        try {
-            // Ensure window and root are interactive
-            setEnabled(true);
-            setFocusableWindowState(true);
-
-            final javax.swing.JRootPane root = getRootPane();
-            if (root != null) {
-                root.setEnabled(true);
-                root.setVisible(true);
-            }
-
-            final javax.swing.JLayeredPane layered = getLayeredPane();
-            if (layered != null) {
-                layered.setEnabled(true);
-            }
-
-            final java.awt.Container content = getContentPane();
-            if (content != null) {
-                enableTree(content);
-            }
-        } catch (Exception ignore) {
-            // defensive only
-        }
-    }
-
-    private void enableTree(java.awt.Component c) {
-        if (c == null) return;
-        c.setEnabled(true);
-        if (c instanceof java.awt.Container container) {
-            for (java.awt.Component child : container.getComponents()) {
-                enableTree(child);
-            }
-        }
     }
 
     void onBrowse() {
