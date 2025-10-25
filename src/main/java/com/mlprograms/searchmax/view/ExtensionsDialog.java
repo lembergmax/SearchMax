@@ -61,8 +61,12 @@ public class ExtensionsDialog extends JDialog {
         JPanel leftButtons = new JPanel(new GridLayout(0, 1, 4, 4));
         JButton addBtn = new JButton("Hinzufügen");
         JButton removeBtn = new JButton("Entfernen");
+        JButton enableAllBtn = new JButton("Alle aktivieren");
+        JButton disableAllBtn = new JButton("Alle deaktivieren");
         leftButtons.add(addBtn);
         leftButtons.add(removeBtn);
+        leftButtons.add(enableAllBtn);
+        leftButtons.add(disableAllBtn);
 
         add(leftButtons, BorderLayout.EAST);
 
@@ -82,6 +86,14 @@ public class ExtensionsDialog extends JDialog {
             if (sel >= 0) {
                 model.removeAt(sel);
             }
+        });
+
+        enableAllBtn.addActionListener(e -> {
+            model.setAllEnabled(true);
+        });
+
+        disableAllBtn.addActionListener(e -> {
+            model.setAllEnabled(false);
         });
 
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -150,6 +162,12 @@ public class ExtensionsDialog extends JDialog {
                 entries.remove(idx);
                 fireTableDataChanged();
             }
+        }
+        public void setAllEnabled(boolean enabled) {
+            for (Entry e : entries) {
+                e.enabled = enabled;
+            }
+            fireTableDataChanged();
         }
 
         @Override

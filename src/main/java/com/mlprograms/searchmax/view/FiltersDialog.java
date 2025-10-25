@@ -49,14 +49,17 @@ public class FiltersDialog extends JDialog {
 
         // Includes
         JPanel incPanel = new JPanel(new BorderLayout(4,4));
-        incPanel.setBorder(BorderFactory.createTitledBorder("Dateiname enthält (mindestens eines)"));
+        incPanel.setBorder(BorderFactory.createTitledBorder("Dateiname enthält"));
         JTable incTable = new JTable(includesModel);
         incTable.setFillsViewportHeight(true);
         incPanel.add(new JScrollPane(incTable), BorderLayout.CENTER);
         JPanel incBtns = new JPanel(new GridLayout(0,1,4,4));
         JButton incAdd = new JButton("Hinzufügen");
         JButton incRemove = new JButton("Entfernen");
+        JButton incEnableAll = new JButton("Alle aktivieren");
+        JButton incDisableAll = new JButton("Alle deaktivieren");
         incBtns.add(incAdd); incBtns.add(incRemove);
+        incBtns.add(incEnableAll); incBtns.add(incDisableAll);
         incPanel.add(incBtns, BorderLayout.EAST);
 
         incAdd.addActionListener(e -> {
@@ -69,17 +72,22 @@ public class FiltersDialog extends JDialog {
         incRemove.addActionListener(e -> {
             int sel = incTable.getSelectedRow(); if (sel >= 0) includesModel.removeAt(sel);
         });
+        incEnableAll.addActionListener(e -> includesModel.setAllEnabled(true));
+        incDisableAll.addActionListener(e -> includesModel.setAllEnabled(false));
 
         // Excludes
         JPanel excPanel = new JPanel(new BorderLayout(4,4));
-        excPanel.setBorder(BorderFactory.createTitledBorder("Dateiname enthält nicht (keines)"));
+        excPanel.setBorder(BorderFactory.createTitledBorder("Dateiname enthält nicht"));
         JTable excTable = new JTable(excludesModel);
         excTable.setFillsViewportHeight(true);
         excPanel.add(new JScrollPane(excTable), BorderLayout.CENTER);
         JPanel excBtns = new JPanel(new GridLayout(0,1,4,4));
         JButton excAdd = new JButton("Hinzufügen");
         JButton excRemove = new JButton("Entfernen");
+        JButton excEnableAll = new JButton("Alle aktivieren");
+        JButton excDisableAll = new JButton("Alle deaktivieren");
         excBtns.add(excAdd); excBtns.add(excRemove);
+        excBtns.add(excEnableAll); excBtns.add(excDisableAll);
         excPanel.add(excBtns, BorderLayout.EAST);
 
         excAdd.addActionListener(e -> {
@@ -92,6 +100,8 @@ public class FiltersDialog extends JDialog {
         excRemove.addActionListener(e -> {
             int sel = excTable.getSelectedRow(); if (sel >= 0) excludesModel.removeAt(sel);
         });
+        excEnableAll.addActionListener(e -> excludesModel.setAllEnabled(true));
+        excDisableAll.addActionListener(e -> excludesModel.setAllEnabled(false));
 
         center.add(incPanel);
         center.add(excPanel);
@@ -131,6 +141,7 @@ public class FiltersDialog extends JDialog {
         public List<Entry> getEntries() { return entries; }
         public void addEntry(String p, boolean enabled) { for (Entry e : entries) if (e.pattern.equals(p)) return; entries.add(new Entry(enabled,p)); fireTableDataChanged(); }
         public void removeAt(int idx) { if (idx>=0 && idx<entries.size()) { entries.remove(idx); fireTableDataChanged(); } }
+        public void setAllEnabled(boolean enabled) { for (Entry e: entries) e.enabled = enabled; fireTableDataChanged(); }
         @Override public int getRowCount() { return entries.size(); }
         @Override public int getColumnCount() { return cols.length; }
         @Override public String getColumnName(int column) { return cols[column]; }
@@ -140,4 +151,3 @@ public class FiltersDialog extends JDialog {
         @Override public void setValueAt(Object aValue,int rowIndex,int columnIndex) { if (rowIndex<0||rowIndex>=entries.size()) return; Entry e=entries.get(rowIndex); if (columnIndex==0 && aValue instanceof Boolean) { e.enabled=(Boolean)aValue; fireTableCellUpdated(rowIndex,columnIndex);} }
     }
 }
-
