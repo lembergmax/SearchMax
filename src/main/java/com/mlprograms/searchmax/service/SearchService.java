@@ -235,7 +235,7 @@ public final class SearchService {
     }
 
     private void startSearch(final String folderPath, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensions, final List<String> includes, final List<String> excludes) {
-        if (folderPath == null || queryText == null || (queryText.isEmpty() && (extensions == null || extensions.isEmpty()))) {
+        if (folderPath == null || queryText == null || (queryText.isEmpty() && ( (extensions == null || extensions.isEmpty()) && (includes == null || includes.isEmpty()) ))) {
             listener.onError("Ungültige Anfrage");
             return;
         }
