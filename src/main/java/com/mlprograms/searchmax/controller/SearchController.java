@@ -6,6 +6,7 @@ import com.mlprograms.searchmax.service.SearchService;
 
 import javax.swing.SwingUtilities;
 import java.util.List;
+import java.util.Map;
 
 public class SearchController implements SearchEventListener {
 
@@ -17,11 +18,11 @@ public class SearchController implements SearchEventListener {
         this.model = model;
     }
 
-    public void startSearch(String folder, String query, List<String> drives, boolean caseSensitive, List<String> extensions, List<String> includes, List<String> excludes) {
+    public void startSearch(String folder, String query, List<String> drives, boolean caseSensitive, List<String> extensions, List<String> includes, Map<String,Boolean> includesCase, List<String> excludes, Map<String,Boolean> excludesCase) {
         model.clearResults();
         model.setStatus("Suche läuft...");
         model.setId(null);
-        service.search(folder, query, drives, this, caseSensitive, extensions, includes, excludes);
+        service.search(folder, query, drives, this, caseSensitive, extensions, includes, includesCase, excludes, excludesCase);
     }
 
     public boolean cancelSearch() {
