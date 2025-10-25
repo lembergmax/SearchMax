@@ -2,118 +2,52 @@ package com.mlprograms.searchmax.view;
 
 import com.mlprograms.searchmax.controller.SearchController;
 import com.mlprograms.searchmax.model.SearchModel;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.*;
-import java.awt.*;
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
-import java.io.*;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.nio.file.Files;
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-public class SearchView extends JFrame {
+@Slf4j
+@Getter
+public final class SearchView extends JFrame {
 
     private final SearchController controller;
     private final SearchModel model;
 
-    private final JTextField folderField = new JTextField(30);
-    private final JButton browseButton = new JButton("Durchsuchen...");
-    private final JTextField queryField = new JTextField(20);
-    private final JCheckBox caseSensitiveCheck = new JCheckBox("Groß-/Kleinschreibung beachten");
-    private final JButton searchButton = new JButton("Suche");
-    private final JButton cancelButton = new JButton("Abbrechen");
-    private final DefaultListModel<String> listModel = new DefaultListModel<>();
-    private final JList<String> resultList = new JList<>(listModel);
-    private final JLabel statusLabel = new JLabel("Bereit");
-    private final JLabel idLabel = new JLabel("-");
-
-    // Buttons für Filterverwaltung
-    private final JButton manageFiltersButton = new JButton("Filter verwalten...");
-
-    // Timer und Zähler für die Punkt-Animation ("Suche läuft...")
-    private javax.swing.Timer dotTimer;
-    private int dotCount = 0;
-
-    // Flag, ob eine Suche läuft (wird von updateButtons gesetzt)
-    private volatile boolean running = false;
-
-    private JPanel drivePanel;
-    private JCheckBox[] driveCheckBoxes;
-
-    // Bekannte Endungen: Allow und Deny (LinkedHashMap für stabile Reihenfolge)
-    private final Map<String, Boolean> knownExtensionsAllow = new LinkedHashMap<>();
-    private final Map<String, Boolean> knownExtensionsDeny = new LinkedHashMap<>();
-    // Bekannte Include/Exclude Filter für Dateinamen
-    private final Map<String, Boolean> knownIncludes = new LinkedHashMap<>();
-    private final Map<String, Boolean> knownExcludes = new LinkedHashMap<>();
-    // Case-Flags pro Muster
-    private final Map<String, Boolean> knownIncludesCase = new LinkedHashMap<>();
-    private final Map<String, Boolean> knownExcludesCase = new LinkedHashMap<>();
-
-    public SearchView(SearchController controller, SearchModel model) {
-        super("SearchMax - Desktop");
-        this.controller = controller;
-        this.model = model;
-        // Lade ggf. gespeicherte Endungen (allow / deny)
-        loadExtensionsFromSettings();
-        initUI();
-        bindModel();
-    }
-
-    // Pfad zur Settings-Datei im user.home
     private final Path settingsFile = Paths.get(System.getProperty("user.home"), ".searchmax.properties");
 
-    private void loadExtensionsFromSettings() {
-        try {
-            if (!Files.exists(settingsFile)) return;
-            java.util.Properties p = new java.util.Properties();
-            try (InputStream is = Files.newInputStream(settingsFile)) {
-                p.load(is);
-            }
-            for (String name : p.stringPropertyNames()) {
-                if (!name.startsWith("ext.")) continue;
-                // name like ext.allow.%ENC% or ext.deny.%ENC%
-                String rest = name.substring(4);
-                boolean isAllow = rest.startsWith("allow.");
-                boolean isDeny = rest.startsWith("deny.");
-                String enc = rest.substring(isAllow ? 6 : (isDeny ? 5 : 0));
-                String ext = URLDecoder.decode(enc, "UTF-8");
-                String val = p.getProperty(name);
-                boolean enabled = Boolean.parseBoolean(val);
-                if (isAllow) knownExtensionsAllow.put(ext, enabled);
-                else if (isDeny) knownExtensionsDeny.put(ext, enabled);
-            }
-        } catch (Exception e) {
-            System.err.println("Warn: konnte Einstellungen nicht laden: " + e.getMessage());
-        }
-    }
+    private final DrivePanel drivePanel;
+    private final TopPanel topPanel;
+    private final CenterPanel centerPanel;
+    private final BottomPanel bottomPanel;
+    private final StatusUpdater statusUpdater;
 
-    private void saveExtensionsToSettings() {
-        try {
-            java.util.Properties p = new java.util.Properties();
-            // allow
-            for (Map.Entry<String, Boolean> en : knownExtensionsAllow.entrySet()) {
-                String key = "ext.allow." + URLEncoder.encode(en.getKey(), "UTF-8");
-                p.setProperty(key, Boolean.TRUE.equals(en.getValue()) ? "true" : "false");
-            }
-            // deny
-            for (Map.Entry<String, Boolean> en : knownExtensionsDeny.entrySet()) {
-                String key = "ext.deny." + URLEncoder.encode(en.getKey(), "UTF-8");
-                p.setProperty(key, Boolean.TRUE.equals(en.getValue()) ? "true" : "false");
-            }
-            try (OutputStream os = Files.newOutputStream(settingsFile)) {
-                p.store(os, "SearchMax settings - extensions");
-            }
-        } catch (Exception e) {
-            System.err.println("Warn: konnte Einstellungen nicht speichern: " + e.getMessage());
-        }
+    private boolean running = false;
+
+    private final Map<String, Boolean> knownIncludes = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownExcludes = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownIncludesCase = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownExcludesCase = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownExtensionsAllow = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownExtensionsDeny = new LinkedHashMap<>();
+
+    public SearchView(final SearchController controller, final SearchModel model) {
+        super("SearchMax");
+        this.controller = controller;
+        this.model = model;
+
+        this.drivePanel = new DrivePanel(this);
+        this.topPanel = new TopPanel(this);
+        this.centerPanel = new CenterPanel();
+        this.bottomPanel = new BottomPanel();
+        this.statusUpdater = new StatusUpdater(this);
+
+        initUI();
+        bindModel();
     }
 
     private void initUI() {
@@ -121,352 +55,185 @@ public class SearchView extends JFrame {
         setSize(800, 600);
         setLocationRelativeTo(null);
 
-        // Panel für Laufwerksauswahl
-        File[] roots = File.listRoots();
-        drivePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        drivePanel.setBorder(BorderFactory.createTitledBorder("Laufwerke durchsuchen"));
-        driveCheckBoxes = new JCheckBox[roots.length];
-        for (int i = 0; i < roots.length; i++) {
-            driveCheckBoxes[i] = new JCheckBox(roots[i].getPath());
-            driveCheckBoxes[i].setSelected(false); // Standard: kein Laufwerk ausgewählt
-            driveCheckBoxes[i].addActionListener(e -> updateFolderFieldState());
-            drivePanel.add(driveCheckBoxes[i]);
-        }
+        getContentPane().add(topPanel, java.awt.BorderLayout.NORTH);
+        getContentPane().add(centerPanel, java.awt.BorderLayout.CENTER);
+        getContentPane().add(bottomPanel, java.awt.BorderLayout.SOUTH);
 
-        JPanel top = new JPanel(new GridBagLayout());
-        GridBagConstraints c = new GridBagConstraints();
-        c.insets = new Insets(4, 4, 4, 4);
-        c.gridx = 0;
-        c.gridy = 0;
-        c.anchor = GridBagConstraints.WEST;
-        top.add(new JLabel("Ordner"), c);
-        c.gridx = 1;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        c.weightx = 1.0;
-        top.add(folderField, c);
-        c.gridx = 2;
-        c.fill = GridBagConstraints.NONE;
-        c.weightx = 0;
-        top.add(browseButton, c);
-        c.gridx = 0;
-        c.gridy = 1;
-        c.gridwidth = 3;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        top.add(drivePanel, c);
-        c.gridwidth = 1;
-        c.gridx = 0;
-        c.gridy = 2;
-        top.add(new JLabel("Suchtext"), c);
-        c.gridx = 1;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        top.add(queryField, c);
-        c.gridx = 2;
-        c.fill = GridBagConstraints.NONE;
-        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        btnPanel.add(caseSensitiveCheck);
-        btnPanel.add(searchButton);
-        btnPanel.add(cancelButton);
-        top.add(btnPanel, c);
-
-        // Namensfilter-Management
-        c.gridx = 0;
-        c.gridy = 3;
-        c.fill = GridBagConstraints.NONE;
-        top.add(new JLabel("Zusätzliche Filter"), c);
-        c.gridx = 1;
-        c.fill = GridBagConstraints.HORIZONTAL;
-        top.add(manageFiltersButton, c);
-
-        JPanel center = new JPanel(new BorderLayout());
-        resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        resultList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        center.add(new JScrollPane(resultList), BorderLayout.CENTER);
-
-        JPanel bottom = new JPanel(new BorderLayout());
-        JPanel info = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        info.add(new JLabel("Status: "));
-        info.add(statusLabel);
-        // Hinweis: die PreferredSize für statusLabel wird nur beim Start der Punkt-Animation gesetzt,
-        // damit beim Animieren der Punkte der nachfolgende Text nicht verschoben wird.
-        // Wenn ein anderer (längerer/andere) Status gesetzt wird, wird die PreferredSize wieder entfernt
-        // und das Layout verhält sich normal.
-        info.add(Box.createHorizontalStrut(16));
-        info.add(new JLabel("Id: "));
-        info.add(idLabel);
-        bottom.add(info, BorderLayout.WEST);
-
-        getContentPane().setLayout(new BorderLayout());
-        getContentPane().add(top, BorderLayout.NORTH);
-        getContentPane().add(center, BorderLayout.CENTER);
-        getContentPane().add(bottom, BorderLayout.SOUTH);
-
-        browseButton.addActionListener(e -> onBrowse());
-        searchButton.addActionListener(e -> onSearch());
-        manageFiltersButton.addActionListener(e -> onManageFilters());
-        cancelButton.addActionListener(e -> onCancel());
-
-        resultList.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
-                if (evt.getClickCount() == 2) {
-                    int idx = resultList.locationToIndex(evt.getPoint());
-                    if (idx >= 0) {
-                        String val = listModel.getElementAt(idx);
-                        int pos = val.indexOf(']');
-                        if (pos >= 0 && pos + 2 < val.length()) {
-                            String path = val.substring(pos + 2);
-                            try {
-                                Desktop.getDesktop().open(new File(path));
-                            } catch (Exception ex) {
-                                JOptionPane.showMessageDialog(SearchView.this, "Datei kann nicht geöffnet werden: " + ex.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE);
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        updateButtons(false);
-        updateFolderFieldState();
+        topPanel.addListeners();
     }
 
-    private void bindModel() {
-        model.addPropertyChangeListener(new PropertyChangeListener() {
-            @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                switch (evt.getPropertyName()) {
-                    case SearchModel.PROP_RESULTS:
-                        java.util.List<String> newList = model.getResults();
-                        SwingUtilities.invokeLater(() -> {
-                            listModel.clear();
-                            for (String s : newList) {
-                                listModel.addElement(s);
-                            }
-                        });
-                        break;
-                    case SearchModel.PROP_STATUS:
-                        SwingUtilities.invokeLater(() -> {
-                            String newStatus = (String) evt.getNewValue();
-                            boolean running = "Suche läuft...".equals(newStatus);
-                            // Wenn Suche läuft, Animation starten; sonst Animation stoppen und echten Status setzen
-                            if (running) {
-                                // Basistext ohne Punkte setzen und Animation starten
-                                statusLabel.setText("Suche läuft");
-                                startDotAnimation();
-                            } else {
-                                stopDotAnimation();
-                                statusLabel.setText(newStatus);
-                            }
-                            updateButtons(running);
-                        });
-                        break;
-                    case SearchModel.PROP_ID:
-                        SwingUtilities.invokeLater(() -> idLabel.setText(evt.getNewValue() == null ? "-" : evt.getNewValue().toString()));
-                        break;
-                }
-            }
-        });
-    }
+    void onBrowse() {
+        final JFileChooser jFileChooser = new JFileChooser();
+        jFileChooser.setDialogTitle("Ordner auswählen");
+        jFileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        jFileChooser.setAcceptAllFileFilterUsed(false);
+        final String path = topPanel.getFolderField().getText();
 
-    // Startet die Punkt-Animation (0..3 Punkte, zyklisch)
-    private void startDotAnimation() {
-        if (dotTimer == null) {
-            dotTimer = new javax.swing.Timer(500, e -> {
-                dotCount = (dotCount + 1) % 4; // 0..3
-                StringBuilder dots = new StringBuilder();
-                for (int i = 0; i < dotCount; i++) dots.append('.');
-                statusLabel.setText("Suche läuft" + dots.toString());
-            });
-            dotTimer.setInitialDelay(0);
-        }
-        // Reserviere die Breite für den Text "Suche läuft...", damit beim Animieren die Breite konstant bleibt
-        FontMetrics fm = statusLabel.getFontMetrics(statusLabel.getFont());
-        int prefW = fm.stringWidth("Suche läuft...");
-        int prefH = fm.getHeight();
-        statusLabel.setPreferredSize(new Dimension(prefW, prefH));
-        statusLabel.revalidate();
-        if (statusLabel.getParent() != null) {
-            statusLabel.getParent().revalidate();
-            statusLabel.getParent().repaint();
-        }
-        dotCount = 0;
-        dotTimer.start();
-    }
-
-    // Stoppt die Punkt-Animation und setzt den Zähler zurück
-    private void stopDotAnimation() {
-        if (dotTimer != null && dotTimer.isRunning()) {
-            dotTimer.stop();
-        }
-        dotCount = 0;
-        // Entferne die feste PreferredSize wieder, damit andere Statustexte das Layout normal beeinflussen
-        statusLabel.setPreferredSize(null);
-        statusLabel.revalidate();
-        if (statusLabel.getParent() != null) {
-            statusLabel.getParent().revalidate();
-            statusLabel.getParent().repaint();
-        }
-    }
-
-    private void updateButtons(boolean running) {
-        this.running = running;
-        searchButton.setEnabled(!running);
-        cancelButton.setEnabled(running);
-        // queryField darf nur bearbeitet werden, wenn nicht running
-        queryField.setEnabled(!running);
-        // Die Aktivierung des Ordnerfelds/Browse-Buttons wird von `updateFolderFieldState()` gesteuert; rufe sie jetzt auf,
-        // damit nach Start/Stop der Suche das Ordnerfeld sofort korrekt freigegeben bzw. gesperrt wird.
-        updateFolderFieldState();
-    }
-
-    private void updateFolderFieldState() {
-        // Wenn gerade eine Suche läuft, sperre Startordner-Bedienung unabhängig von der Laufwerk-Auswahl
-        if (running) {
-            folderField.setEnabled(false);
-            browseButton.setEnabled(false);
-            return;
-        }
-
-        boolean anyDriveSelected = false;
-        if (driveCheckBoxes != null) {
-            for (JCheckBox cb : driveCheckBoxes) {
-                if (cb.isSelected()) {
-                    anyDriveSelected = true;
-                    break;
-                }
-            }
-        }
-        // Wenn ein Laufwerk ausgewählt ist, ist das Ordnerfeld gesperrt; sonst frei.
-        folderField.setEnabled(!anyDriveSelected);
-        browseButton.setEnabled(!anyDriveSelected);
-        // Der Text im Feld bleibt erhalten, wird aber gesperrt, wenn ein Laufwerk ausgewählt ist
-    }
-
-    private void onBrowse() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Ordner auswählen");
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        chooser.setAcceptAllFileFilterUsed(false);
-
-        // Falls bereits ein Pfad im Textfeld steht, starte dort
-        String currentPath = folderField.getText();
-        if (currentPath != null && !currentPath.trim().isEmpty()) {
-            File currentDir = new File(currentPath);
-            if (currentDir.exists() && currentDir.isDirectory()) {
-                chooser.setCurrentDirectory(currentDir);
+        if (path != null && !path.isBlank()) {
+            final File directory = new File(path);
+            if (directory.exists() && directory.isDirectory()) {
+                jFileChooser.setCurrentDirectory(directory);
             }
         }
 
-        int result = chooser.showOpenDialog(this);
-
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFolder = chooser.getSelectedFile();
-            if (selectedFolder != null && selectedFolder.isDirectory()) {
-                folderField.setText(selectedFolder.getAbsolutePath());
+        if (jFileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            final File selected = jFileChooser.getSelectedFile();
+            if (selected != null && selected.isDirectory()) {
+                topPanel.getFolderField().setText(selected.getAbsolutePath());
             }
         }
     }
 
-    private java.util.List<String> getSelectedDrives() {
-        java.util.List<String> drives = new java.util.ArrayList<>();
-        if (driveCheckBoxes != null) {
-            for (JCheckBox cb : driveCheckBoxes) {
-                if (cb.isSelected()) {
-                    drives.add(cb.getText());
-                }
+    void onSearch() {
+        final List<String> selectedDrives = drivePanel.getSelectedDrives();
+        final String folder = topPanel.getFolderField().getText();
+        final String query = topPanel.getQueryField().getText();
+        final boolean caseSensitive = topPanel.getCaseSensitiveCheck().isSelected();
+
+        final List<String> extensionsAllow = new ArrayList<>();
+        final List<String> extensionsDeny = new ArrayList<>();
+
+        for (Map.Entry<String, Boolean> entry : knownExtensionsAllow.entrySet()) {
+            if (Boolean.TRUE.equals(entry.getValue())) {
+                extensionsAllow.add(entry.getKey());
             }
         }
-        return drives;
-    }
-
-    private void onManageFilters() {
-        FiltersDialog dlg = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny);
-        dlg.setVisible(true);
-        if (dlg.isConfirmed()) {
-            Map<String, Boolean> inc = dlg.getIncludesMap();
-            Map<String, Boolean> exc = dlg.getExcludesMap();
-            Map<String, Boolean> incCase = dlg.getIncludesCaseMap();
-            Map<String, Boolean> excCase = dlg.getExcludesCaseMap();
-            Map<String, Boolean> extsAllow = dlg.getExtensionsAllowMap();
-            Map<String, Boolean> extsDeny = dlg.getExtensionsDenyMap();
-            knownIncludes.clear();
-            knownIncludes.putAll(inc);
-            knownExcludes.clear();
-            knownExcludes.putAll(exc);
-            knownIncludesCase.clear();
-            knownIncludesCase.putAll(incCase);
-            knownExcludesCase.clear();
-            knownExcludesCase.putAll(excCase);
-            // Update knownExtensionsAllow / knownExtensionsDeny
-            knownExtensionsAllow.clear();
-            knownExtensionsAllow.putAll(extsAllow);
-            knownExtensionsDeny.clear();
-            knownExtensionsDeny.putAll(extsDeny);
-            // Persist immediately
-            saveExtensionsToSettings();
+        for (Map.Entry<String, Boolean> entry : knownExtensionsDeny.entrySet()) {
+            if (Boolean.TRUE.equals(entry.getValue())) {
+                extensionsDeny.add(entry.getKey());
+            }
         }
-    }
 
-    private void onSearch() {
-        java.util.List<String> selectedDrives = getSelectedDrives();
-        String folder = folderField.getText();
-        String q = queryField.getText();
-        boolean caseSensitive = caseSensitiveCheck.isSelected();
-        // Build allow/deny extension lists from knownExtensionsAllow/Deny (only active ones)
-        java.util.List<String> extensionsAllow = new ArrayList<>();
-        java.util.List<String> extensionsDeny = new ArrayList<>();
-        for (Map.Entry<String, Boolean> en : knownExtensionsAllow.entrySet())
-            if (Boolean.TRUE.equals(en.getValue())) extensionsAllow.add(en.getKey());
-        for (Map.Entry<String, Boolean> en : knownExtensionsDeny.entrySet())
-            if (Boolean.TRUE.equals(en.getValue())) extensionsDeny.add(en.getKey());
-        // Build include/exclude lists (only active ones) and case maps
-        java.util.List<String> includes = new ArrayList<>();
-        java.util.Map<String, Boolean> includesCase = new java.util.LinkedHashMap<>();
-        java.util.List<String> excludes = new ArrayList<>();
-        java.util.Map<String, Boolean> excludesCase = new java.util.LinkedHashMap<>();
-        for (Map.Entry<String, Boolean> en : knownIncludes.entrySet()) {
-            if (Boolean.TRUE.equals(en.getValue())) {
-                String key = en.getKey();
+        final List<String> includes = new ArrayList<>();
+        final Map<String, Boolean> includesCase = new java.util.LinkedHashMap<>();
+        final List<String> excludes = new ArrayList<>();
+        final Map<String, Boolean> excludesCase = new java.util.LinkedHashMap<>();
+
+        for (Map.Entry<String, Boolean> entry : knownIncludes.entrySet()) {
+            if (Boolean.TRUE.equals(entry.getValue())) {
+                String key = entry.getKey();
                 includes.add(key);
                 includesCase.put(key, Boolean.TRUE.equals(knownIncludesCase.get(key)));
             }
         }
-        for (Map.Entry<String, Boolean> en : knownExcludes.entrySet()) {
-            if (Boolean.TRUE.equals(en.getValue())) {
-                String key = en.getKey();
+        for (Map.Entry<String, Boolean> entry : knownExcludes.entrySet()) {
+            if (Boolean.TRUE.equals(entry.getValue())) {
+                String key = entry.getKey();
                 excludes.add(key);
                 excludesCase.put(key, Boolean.TRUE.equals(knownExcludesCase.get(key)));
             }
         }
 
         if (!selectedDrives.isEmpty()) {
-            // Erlaube Suche, wenn Search-Text ODER Extensions ODER mindestens ein include-Filter gesetzt ist
-            if ((q == null || q.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
+            if ((query == null || query.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Bitte einen Suchtext oder Dateiendungen angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            controller.startSearch("", q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
+            controller.startSearch("", query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
             return;
         }
-        // Kein Laufwerk ausgewählt, Ordner muss angegeben werden
+
         if (folder == null || folder.trim().isEmpty()) {
             JOptionPane.showMessageDialog(this, "Bitte einen Startordner angeben oder ein Laufwerk auswählen.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if ((q == null || q.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
+        if ((query == null || query.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Bitte einen Suchtext, Dateiendungen oder mindestens einen 'Soll enthalten'-Filter angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        controller.startSearch(folder.trim(), q == null ? "" : q.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
+        controller.startSearch(folder.trim(), query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
     }
 
-    private void onCancel() {
-        boolean ok = controller.cancelSearch();
-        if (ok) {
-            // Stelle UI sofort wieder her (falls Model-Event noch nicht angekommen ist)
+    void onCancel() {
+        if (controller.cancelSearch()) {
             updateButtons(false);
         } else {
-            // Falls kein laufender Search existierte, dennoch prüfen ob Ordnerfeld freigegeben werden kann
             updateFolderFieldState();
         }
     }
+
+    void onManageFilters() {
+        FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny);
+        filtersDialog.setVisible(true);
+
+        if (filtersDialog.isConfirmed()) {
+            Map<String, Boolean> include = filtersDialog.getIncludesMap();
+            Map<String, Boolean> exclude = filtersDialog.getExcludesMap();
+            Map<String, Boolean> incCase = filtersDialog.getIncludesCaseMap();
+            Map<String, Boolean> excCase = filtersDialog.getExcludesCaseMap();
+            Map<String, Boolean> extensionsAllow = filtersDialog.getExtensionsAllowMap();
+            Map<String, Boolean> extensionsDeny = filtersDialog.getExtensionsDenyMap();
+
+            knownIncludes.clear();
+            knownIncludes.putAll(include);
+            knownExcludes.clear();
+            knownExcludes.putAll(exclude);
+            knownIncludesCase.clear();
+            knownIncludesCase.putAll(incCase);
+            knownExcludesCase.clear();
+            knownExcludesCase.putAll(excCase);
+
+            knownExtensionsAllow.clear();
+            knownExtensionsAllow.putAll(extensionsAllow);
+            knownExtensionsDeny.clear();
+            knownExtensionsDeny.putAll(extensionsDeny);
+
+            saveExtensionsToSettings();
+        }
+    }
+
+    void updateFolderFieldState() {
+        if (running) {
+            topPanel.getFolderField().setEnabled(false);
+            topPanel.getBrowseButton().setEnabled(false);
+            return;
+        }
+
+        boolean anyDriveSelected = !drivePanel.getSelectedDrives().isEmpty();
+        topPanel.getFolderField().setEnabled(!anyDriveSelected);
+        topPanel.getBrowseButton().setEnabled(!anyDriveSelected);
+    }
+
+    void updateButtons(final boolean running) {
+        this.running = running;
+        topPanel.getSearchButton().setEnabled(!running);
+        topPanel.getCancelButton().setEnabled(running);
+        topPanel.getQueryField().setEnabled(!running);
+        updateFolderFieldState();
+    }
+
+    private void bindModel() {
+        model.addPropertyChangeListener(statusUpdater::onModelChange);
+    }
+
+    private void saveExtensionsToSettings() {
+        try {
+            final Properties properties = new java.util.Properties();
+
+            properties.put("includes", String.join(",", knownIncludes.keySet()));
+            properties.put("excludes", String.join(",", knownExcludes.keySet()));
+            properties.put("includesCase", mapToString(knownIncludesCase));
+            properties.put("excludesCase", mapToString(knownExcludesCase));
+            properties.put("extensionsAllow", String.join(",", knownExtensionsAllow.keySet()));
+            properties.put("extensionsDeny", String.join(",", knownExtensionsDeny.keySet()));
+
+            java.io.File file = settingsFile.toFile();
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+                properties.store(fos, "SearchMax Filter Settings");
+            }
+        } catch (Exception e) {
+            log.warn("Fehler beim Speichern der Filtereinstellungen", e);
+        }
+    }
+
+    private String mapToString(Map<String, Boolean> map) {
+        final StringBuilder stringBuilder = new StringBuilder();
+        for (Map.Entry<String, Boolean> entry : map.entrySet()) {
+            stringBuilder.append(entry.getKey()).append("=").append(entry.getValue()).append(";");
+        }
+
+        return stringBuilder.toString();
+    }
+
+
 }

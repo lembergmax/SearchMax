@@ -18,10 +18,11 @@ public class SearchController implements SearchEventListener {
         this.model = model;
     }
 
-    public void startSearch(String folder, String query, List<String> drives, boolean caseSensitive, List<String> extensionsAllow, List<String> extensionsDeny, List<String> includes, Map<String,Boolean> includesCase, List<String> excludes, Map<String,Boolean> excludesCase) {
+    public void startSearch(final String folder, final String query, final List<String> drives, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final Map<String, Boolean> includesCase, final List<String> excludes, final Map<String, Boolean> excludesCase) {
         model.clearResults();
         model.setStatus("Suche läuft...");
         model.setId(null);
+
         service.search(folder, query, drives, this, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
     }
 
@@ -31,11 +32,13 @@ public class SearchController implements SearchEventListener {
             model.setStatus("Keine laufende Suche");
             return false;
         }
+
         boolean ok = service.cancel(id);
         model.setStatus(ok ? "Suche abgebrochen" : "Abbruch fehlgeschlagen");
         if (ok) {
             model.setId(null);
         }
+
         return ok;
     }
 
