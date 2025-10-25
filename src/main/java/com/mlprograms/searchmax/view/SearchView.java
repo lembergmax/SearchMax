@@ -29,9 +29,7 @@ public class SearchView extends JFrame {
     private final JLabel statusLabel = new JLabel("Bereit");
     private final JLabel idLabel = new JLabel("-");
 
-    // Neu: Feld für Dateiendungen (z. B. ".java,.txt")
-    private final JTextField extensionsField = new JTextField(20);
-    private final JButton manageExtensionsButton = new JButton("Verwalten...");
+    // Buttons für Filterverwaltung
     private final JButton manageFiltersButton = new JButton("Filter verwalten...");
 
     // Timer und Zähler für die Punkt-Animation ("Suche läuft...")
@@ -54,10 +52,7 @@ public class SearchView extends JFrame {
         super("SearchMax - Desktop");
         this.controller = controller;
         this.model = model;
-        // initialisiere knownExtensions aus dem (evtl.) vorhandenen Text im Feld
-        for (String e : parseExtensions(extensionsField.getText())) {
-            knownExtensions.put(e, Boolean.TRUE);
-        }
+        // knownExtensions bleibt initial leer; Verwaltung über den Extensions-Dialog (kein Textfeld mehr)
         initUI();
         bindModel();
     }
@@ -95,11 +90,8 @@ public class SearchView extends JFrame {
         c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(queryField, c);
         c.gridx = 2; c.fill = GridBagConstraints.NONE; JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT)); btnPanel.add(caseSensitiveCheck); btnPanel.add(searchButton); btnPanel.add(cancelButton); top.add(btnPanel, c);
 
-        // Neue Zeile: Dateiendungen
-        c.gridx = 0; c.gridy = 3; c.fill = GridBagConstraints.NONE; top.add(new JLabel("Dateiendungen (z.B. .java,.txt)"), c);
-        c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(extensionsField, c);
-        c.gridx = 2; c.fill = GridBagConstraints.NONE; top.add(manageExtensionsButton, c);
-        c.gridx = 0; c.gridy = 4; c.fill = GridBagConstraints.NONE; top.add(new JLabel("Namensfilter (optional)"), c);
+        // Namensfilter-Management
+        c.gridx = 0; c.gridy = 3; c.fill = GridBagConstraints.NONE; top.add(new JLabel("Namensfilter (optional)"), c);
         c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; top.add(manageFiltersButton, c);
 
         JPanel center = new JPanel(new BorderLayout());
@@ -127,7 +119,6 @@ public class SearchView extends JFrame {
 
         browseButton.addActionListener(e -> onBrowse());
         searchButton.addActionListener(e -> onSearch());
-        manageExtensionsButton.addActionListener(e -> onManageExtensions());
         manageFiltersButton.addActionListener(e -> onManageFilters());
         cancelButton.addActionListener(e -> onCancel());
 
@@ -239,7 +230,6 @@ public class SearchView extends JFrame {
         cancelButton.setEnabled(running);
         // queryField darf nur bearbeitet werden, wenn nicht running
         queryField.setEnabled(!running);
-        extensionsField.setEnabled(!running);
         // Die Aktivierung des Ordnerfelds/Browse-Buttons wird von `updateFolderFieldState()` gesteuert; rufe sie jetzt auf,
         // damit nach Start/Stop der Suche das Ordnerfeld sofort korrekt freigegeben bzw. gesperrt wird.
         updateFolderFieldState();
@@ -305,46 +295,6 @@ public class SearchView extends JFrame {
         return drives;
     }
 
-    private java.util.List<String> parseExtensions(String raw) {
-        java.util.List<String> out = new ArrayList<>();
-        if (raw == null) {
-            return out;
-        }
-        String[] parts = raw.split(",");
-        for (String p : parts) {
-            if (p == null) continue;
-            String t = p.trim();
-            if (t.isEmpty()) continue;
-            // Normiere: stelle sicher, dass es mit einem Punkt beginnt
-            if (!t.startsWith(".")) {
-                t = "." + t;
-            }
-            out.add(t.toLowerCase());
-        }
-        return out;
-    }
-
-    private void onManageExtensions() {
-        // Öffne Dialog mit bekannten Endungen (inkl. aktiv/inaktiv)
-        ExtensionsDialog dlg = new ExtensionsDialog(this, knownExtensions);
-        dlg.setVisible(true);
-        if (dlg.isConfirmed()) {
-            // Update knownExtensions mit Rückgabe aus Dialog (inkl. deaktivierter Einträge)
-            Map<String, Boolean> returned = dlg.getExtensionsMap();
-            knownExtensions.clear();
-            knownExtensions.putAll(returned);
-
-            // Setze das Textfeld auf die kommaseparierte Liste der aktiven Endungen
-            List<String> active = dlg.getActiveExtensions();
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < active.size(); i++) {
-                if (i > 0) sb.append(',');
-                sb.append(active.get(i));
-            }
-            extensionsField.setText(sb.toString());
-        }
-    }
-
     private void onManageFilters() {
         FiltersDialog dlg = new FiltersDialog(this, knownIncludes, knownExcludes);
         dlg.setVisible(true);
@@ -361,7 +311,9 @@ public class SearchView extends JFrame {
         String folder = folderField.getText();
         String q = queryField.getText();
         boolean caseSensitive = caseSensitiveCheck.isSelected();
-        java.util.List<String> extensions = parseExtensions(extensionsField.getText());
+        // Build extensions list from knownExtensions (only active ones)
+        java.util.List<String> extensions = new ArrayList<>();
+        for (Map.Entry<String, Boolean> en : knownExtensions.entrySet()) if (Boolean.TRUE.equals(en.getValue())) extensions.add(en.getKey());
         // Build include/exclude lists (only active ones)
         java.util.List<String> includes = new ArrayList<>();
         java.util.List<String> excludes = new ArrayList<>();
