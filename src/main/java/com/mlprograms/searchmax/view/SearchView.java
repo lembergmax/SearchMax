@@ -7,11 +7,14 @@ import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.List;
+import java.util.function.Consumer;
 
 @Slf4j
 @Getter
@@ -54,38 +57,31 @@ public final class SearchView extends JFrame {
 
         // TODO: irgendwie anders lösen
         SwingUtilities.invokeLater(() -> {
-            java.util.function.Consumer<Component> attachDoClick = new java.util.function.Consumer<>() {
+            Consumer<Component> attachDoClick = new Consumer<>() {
                 @Override
-                public void accept(Component c) {
-                    if (c instanceof AbstractButton ab) {
-                        // attach once
-                        boolean found = false;
-                        for (java.awt.event.MouseListener ml : ab.getMouseListeners()) {
-                            if (ml.getClass().getName().contains("ForceDoClick")) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            ab.addMouseListener(new java.awt.event.MouseAdapter() {
+                public void accept(final Component component) {
+                    if (component instanceof AbstractButton abstractButton) {
+                        if (!Boolean.TRUE.equals(abstractButton.getClientProperty("ForceDoClickInstalled"))) {
+                            abstractButton.addMouseListener(new MouseAdapter() {
                                 @Override
-                                public void mouseReleased(java.awt.event.MouseEvent e) {
-                                    // only left button
-                                    if (e.getButton() == java.awt.event.MouseEvent.BUTTON1 && ab.isEnabled()) {
-                                        try {
-                                            System.out.println("[FORCE] mouseReleased -> doClick: " + ab.getClass().getSimpleName() + " text=" + ab.getText());
-                                            ab.doClick();
-                                        } catch (Throwable t) {
-                                            t.printStackTrace();
-                                        }
+                                public void mousePressed(final MouseEvent mouseEvent) {
+                                    if (mouseEvent.getButton() == MouseEvent.BUTTON1 && abstractButton.isEnabled()) {
+                                        abstractButton.doClick();
                                     }
                                 }
                             });
+                            abstractButton.putClientProperty("ForceDoClickInstalled", Boolean.TRUE);
                         }
                     }
-                    if (c instanceof Container cont) for (Component ch : cont.getComponents()) accept(ch);
+
+                    if (component instanceof Container container) {
+                        for (Component innerComponent : container.getComponents()) {
+                            accept(innerComponent);
+                        }
+                    }
                 }
             };
+
             attachDoClick.accept(getContentPane());
         });
 

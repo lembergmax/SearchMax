@@ -2,23 +2,20 @@ package com.mlprograms.searchmax.service;
 
 import com.mlprograms.searchmax.DirectoryTask;
 import com.mlprograms.searchmax.SearchHandle;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
+@Slf4j
 public final class SearchService {
-
-    private static final Logger LOGGER = Logger.getLogger(SearchService.class.getName());
 
     private final ForkJoinPool pool;
     private final ConcurrentMap<String, SearchHandle> searches = new ConcurrentHashMap<>();
@@ -78,7 +75,7 @@ public final class SearchService {
 
             return true;
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Fehler beim Abbrechen der Suche: " + searchId, e);
+            log.warn("Fehler beim Abbrechen der Suche: " + searchId, e);
             return false;
         }
     }
@@ -234,7 +231,7 @@ public final class SearchService {
             try {
                 pool.invoke(new DirectoryTask(startPath, handle.getResults(), handle.getMatchCount(), queryText, handle.getStartNano(), onMatch, handle.getCancelled(), caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase));
             } catch (Throwable t) {
-                LOGGER.log(Level.SEVERE, "Suche fehlgeschlagen (id=" + id + ")", t);
+                log.error("Suche fehlgeschlagen (id=" + id + ")", t);
                 safeSendError(listener, "Suche fehlgeschlagen: " + t.getMessage());
             } finally {
                 completeHandle(handle, listener);
@@ -258,7 +255,7 @@ public final class SearchService {
                 searches.entrySet().removeIf(e -> e.getValue() == handle);
             }
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Fehler beim Abschließen des Handles", e);
+            log.warn("Fehler beim Abschließen des Handles", e);
         }
     }
 
@@ -266,7 +263,7 @@ public final class SearchService {
         try {
             listener.onMatch(data);
         } catch (Exception e) {
-            LOGGER.log(Level.FINE, "Fehler beim Senden von Match", e);
+            log.info("Fehler beim Senden von Match", e);
         }
     }
 
@@ -274,7 +271,7 @@ public final class SearchService {
         try {
             listener.onError(message);
         } catch (Exception e) {
-            LOGGER.log(Level.FINE, "Fehler beim Senden von Error", e);
+            log.info("Fehler beim Senden von Error", e);
         }
     }
 
