@@ -37,8 +37,8 @@ public final class GuiConstants {
     public static final String FILTERS_PANEL_TITLE = "Filename filters";
     public static final String TAB_ALLOW = "Allow";
     public static final String TAB_DENY = "Exclude";
-    public static final String RADIO_ANY = "At least one filter must match (OR)";
-    public static final String RADIO_ALL = "All filters must match (AND)";
+    public static final String RADIO_ANY = "At least one filter must match";
+    public static final String RADIO_ALL = "All filters must match";
     public static final String BUTTON_ADD = "Add";
     public static final String BUTTON_ENABLE_ALL = "Enable all";
     public static final String BUTTON_DISABLE_ALL = "Disable all";
