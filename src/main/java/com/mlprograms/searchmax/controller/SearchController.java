@@ -30,6 +30,7 @@ public class SearchController implements SearchEventListener {
     }
 
     public void startSearch(final String folder, final String query, final List<String> drives, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final Map<String, Boolean> includesCase, final List<String> excludes, final Map<String, Boolean> excludesCase, final boolean includeAllMode) {
+        pendingResults.clear();
         model.clearResults();
         model.setStatus("Suche läuft...");
 

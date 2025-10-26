@@ -43,10 +43,18 @@ public final class StatusUpdater {
                 javax.swing.DefaultListModel<String> model = searchView.getCenterPanel().getListModel();
 
                 if (oldValue instanceof java.util.List<?> oldList && newValue instanceof java.util.List<?> newList) {
-                    int oldSize = oldList.size();
-                    for (int i = oldSize; i < newList.size(); i++) {
-                        Object obj = newList.get(i);
-                        if (obj instanceof String s) model.addElement(s);
+                    final int oldSize = oldList.size();
+                    final int newSize = newList.size();
+                    if (newSize < oldSize) {
+                        model.clear();
+                        for (Object object : newList) {
+                            if (object instanceof String string) model.addElement(string);
+                        }
+                    } else {
+                        for (int i = oldSize; i < newSize; i++) {
+                            Object obj = newList.get(i);
+                            if (obj instanceof String s) model.addElement(s);
+                        }
                     }
                 } else if (newValue instanceof java.util.List<?> list) {
                     model.clear();
