@@ -43,11 +43,15 @@ public final class DrivePanel extends JPanel {
     }
 
     public void setSelectedDrives(List<String> drives) {
-        if (drives == null) return;
-        List<String> normalized = drives.stream().map(String::trim).collect(Collectors.toList());
+        if (drives == null) {
+            return;
+        }
+
+        List<String> normalized = drives.stream().map(String::trim).toList();
         for (JCheckBox cb : driveCheckBoxes) {
             cb.setSelected(normalized.contains(cb.getText()));
         }
+
         this.parent.getTopPanel().updateFolderFieldState();
     }
 

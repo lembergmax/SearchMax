@@ -21,12 +21,12 @@ public final class SearchHandle {
     private final AtomicInteger matchCount;
     private final Collection<String> results;
 
-    public SearchHandle(ForkJoinTask<?> initialTask, long startNano, AtomicInteger remainingTasks, AtomicInteger matchCount, Collection<String> results) {
-        this.startNano = startNano;
+    public SearchHandle(final ForkJoinTask<?> task, final long startTimeNano, final AtomicInteger remainingTasks, final AtomicInteger matchCount, final Collection<String> results) {
+        this.startNano = startTimeNano;
         this.remainingTasks = remainingTasks;
         this.matchCount = matchCount;
         this.results = results;
-        setTask(initialTask);
+        setTask(task);
     }
 
     public void setTask(ForkJoinTask<?> task) {
