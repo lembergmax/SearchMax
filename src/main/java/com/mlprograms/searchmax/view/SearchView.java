@@ -9,13 +9,21 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
 
+/**
+ * Die Hauptansicht für die SearchMax-Anwendung.
+ * Verwaltet die UI-Komponenten, das Laden und Speichern der Einstellungen sowie die Interaktion mit dem Controller und Model.
+ */
 @Slf4j
 @Getter
 public final class SearchView extends JFrame {
@@ -23,23 +31,69 @@ public final class SearchView extends JFrame {
     private final SearchController controller;
     private final SearchModel model;
 
+    /**
+     * Pfad zur Datei, in der die Einstellungen gespeichert werden.
+     */
     private final Path settingsFile = Paths.get(System.getProperty("user.home"), ".searchmax.properties");
 
+    /**
+     * Panel zur Auswahl der Laufwerke.
+     */
     private final DrivePanel drivePanel;
+    /**
+     * Panel für die oberen Bedienelemente (Suchfeld, Buttons).
+     */
     private final TopPanel topPanel;
+    /**
+     * Panel für die Anzeige der Suchergebnisse.
+     */
     private final CenterPanel centerPanel;
+    /**
+     * Panel für die unteren Bedienelemente (Status, Fortschritt).
+     */
     private final BottomPanel bottomPanel;
+    /**
+     * Hilfsklasse zur Aktualisierung des Status in der UI.
+     */
     private final StatusUpdater statusUpdater;
 
+    /**
+     * Gibt an, ob aktuell eine Suche läuft.
+     */
     private boolean running = false;
 
+    /**
+     * Bekannte "Enthält"-Filter.
+     */
     private final Map<String, Boolean> knownIncludes = new LinkedHashMap<>();
+    /**
+     * Bekannte "Enthält nicht"-Filter.
+     */
     private final Map<String, Boolean> knownExcludes = new LinkedHashMap<>();
+    /**
+     * Groß-/Kleinschreibung für "Enthält"-Filter.
+     */
     private final Map<String, Boolean> knownIncludesCase = new LinkedHashMap<>();
+    /**
+     * Groß-/Kleinschreibung für "Enthält nicht"-Filter.
+     */
     private final Map<String, Boolean> knownExcludesCase = new LinkedHashMap<>();
+    /**
+     * Erlaubte Dateiendungen.
+     */
     private final Map<String, Boolean> knownExtensionsAllow = new LinkedHashMap<>();
+    /**
+     * Nicht erlaubte Dateiendungen.
+     */
     private final Map<String, Boolean> knownExtensionsDeny = new LinkedHashMap<>();
 
+    /**
+     * Konstruktor für die SearchView.
+     * Initialisiert die UI-Komponenten, lädt Einstellungen und bindet das Model.
+     *
+     * @param controller Der zugehörige Controller
+     * @param model      Das zugehörige Model
+     */
     public SearchView(final SearchController controller, final SearchModel model) {
         super("SearchMax");
         this.controller = controller;
@@ -84,26 +138,27 @@ public final class SearchView extends JFrame {
 
             attachDoClick.accept(getContentPane());
         });
-
-
     }
 
+    /**
+     * Initialisiert die Benutzeroberfläche und deren Layout.
+     */
     private void initUI() {
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
-        Container content = getContentPane();
-        content.setLayout(new BorderLayout(6, 6));
-        content.add(topPanel, BorderLayout.NORTH);
-        content.add(centerPanel, BorderLayout.CENTER);
-        content.add(bottomPanel, BorderLayout.SOUTH);
+        final Container container = getContentPane();
+        container.setLayout(new BorderLayout(6, 6));
+        container.add(topPanel, BorderLayout.NORTH);
+        container.add(centerPanel, BorderLayout.CENTER);
+        container.add(bottomPanel, BorderLayout.SOUTH);
 
         topPanel.addListeners();
         updateButtons(false);
         updateFolderFieldState();
 
-        addWindowListener(new java.awt.event.WindowAdapter() {
+        addWindowListener(new WindowAdapter() {
             @Override
-            public void windowClosing(java.awt.event.WindowEvent e) {
+            public void windowClosing(final WindowEvent windowEvent) {
                 saveExtensionsToSettings();
             }
         });
@@ -116,13 +171,16 @@ public final class SearchView extends JFrame {
         SwingUtilities.invokeLater(() -> topPanel.getQueryField().requestFocusInWindow());
     }
 
+    /**
+     * Öffnet einen Dialog zum Auswählen eines Ordners.
+     */
     void onBrowse() {
         final JFileChooser jFileChooser = new JFileChooser();
         jFileChooser.setDialogTitle("Ordner auswählen");
         jFileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         jFileChooser.setAcceptAllFileFilterUsed(false);
-        final String path = topPanel.getFolderField().getText();
 
+        final String path = topPanel.getFolderField().getText();
         if (path != null && !path.isBlank()) {
             final File directory = new File(path);
             if (directory.exists() && directory.isDirectory()) {
@@ -138,6 +196,9 @@ public final class SearchView extends JFrame {
         }
     }
 
+    /**
+     * Startet die Suche mit den aktuellen Filter- und Sucheinstellungen.
+     */
     void onSearch() {
         final List<String> selectedDrives = drivePanel.getSelectedDrives();
         final String folder = topPanel.getFolderField().getText();
@@ -159,24 +220,12 @@ public final class SearchView extends JFrame {
         }
 
         final List<String> includes = new ArrayList<>();
-        final Map<String, Boolean> includesCase = new java.util.LinkedHashMap<>();
+        final Map<String, Boolean> includesCase = new LinkedHashMap<>();
         final List<String> excludes = new ArrayList<>();
-        final Map<String, Boolean> excludesCase = new java.util.LinkedHashMap<>();
+        final Map<String, Boolean> excludesCase = new LinkedHashMap<>();
 
-        for (Map.Entry<String, Boolean> entry : knownIncludes.entrySet()) {
-            if (Boolean.TRUE.equals(entry.getValue())) {
-                String key = entry.getKey();
-                includes.add(key);
-                includesCase.put(key, Boolean.TRUE.equals(knownIncludesCase.get(key)));
-            }
-        }
-        for (Map.Entry<String, Boolean> entry : knownExcludes.entrySet()) {
-            if (Boolean.TRUE.equals(entry.getValue())) {
-                String key = entry.getKey();
-                excludes.add(key);
-                excludesCase.put(key, Boolean.TRUE.equals(knownExcludesCase.get(key)));
-            }
-        }
+        filterActiveEntries(includes, includesCase, knownIncludes, knownIncludesCase);
+        filterActiveEntries(excludes, excludesCase, knownExcludes, knownExcludesCase);
 
         if (!selectedDrives.isEmpty()) {
             if ((query == null || query.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
@@ -195,9 +244,31 @@ public final class SearchView extends JFrame {
             JOptionPane.showMessageDialog(this, "Bitte einen Suchtext, Dateityp oder mindestens einen 'Soll enthalten'-Filter angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
             return;
         }
+
         controller.startSearch(folder.trim(), query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
     }
 
+    /**
+     * Filtert aktive Einträge aus den bekannten Filtern und überträgt sie in die Ziel-Listen/Maps.
+     *
+     * @param list         Ziel-Liste für aktive Filter
+     * @param mapCase      Ziel-Map für Groß-/Kleinschreibung
+     * @param mapKnown     Quell-Map der bekannten Filter
+     * @param mapKnownCase Quell-Map der Groß-/Kleinschreibung
+     */
+    private void filterActiveEntries(final List<String> list, final Map<String, Boolean> mapCase, final Map<String, Boolean> mapKnown, final Map<String, Boolean> mapKnownCase) {
+        for (final Map.Entry<String, Boolean> entry : mapKnown.entrySet()) {
+            if (Boolean.TRUE.equals(entry.getValue())) {
+                String key = entry.getKey();
+                list.add(key);
+                mapCase.put(key, Boolean.TRUE.equals(mapKnownCase.get(key)));
+            }
+        }
+    }
+
+    /**
+     * Bricht die laufende Suche ab.
+     */
     void onCancel() {
         if (controller.cancelSearch()) {
             updateButtons(false);
@@ -206,9 +277,11 @@ public final class SearchView extends JFrame {
         }
     }
 
+    /**
+     * Öffnet den Filter-Dialog und übernimmt ggf. die neuen Filtereinstellungen.
+     */
     void onManageFilters() {
-        // pass also the case maps so the dialog can initialize the case checkboxes correctly
-        FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase);
+        final FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase);
         filtersDialog.setVisible(true);
 
         if (filtersDialog.isConfirmed()) {
@@ -237,6 +310,9 @@ public final class SearchView extends JFrame {
         }
     }
 
+    /**
+     * Aktualisiert den Zustand des Ordnerfeldes und der Drive-Auswahl abhängig vom Suchstatus.
+     */
     void updateFolderFieldState() {
         if (running) {
             topPanel.getFolderField().setEnabled(false);
@@ -245,12 +321,17 @@ public final class SearchView extends JFrame {
             return;
         }
 
-        boolean anyDriveSelected = !drivePanel.getSelectedDrives().isEmpty();
+        final boolean anyDriveSelected = !drivePanel.getSelectedDrives().isEmpty();
         topPanel.getFolderField().setEnabled(!anyDriveSelected);
         topPanel.getBrowseButton().setEnabled(!anyDriveSelected);
         drivePanel.setDrivesEnabled(true);
     }
 
+    /**
+     * Aktiviert oder deaktiviert die Buttons und Eingabefelder je nach Suchstatus.
+     *
+     * @param running Gibt an, ob eine Suche läuft
+     */
     void updateButtons(final boolean running) {
         this.running = running;
         topPanel.getSearchButton().setEnabled(!running);
@@ -262,15 +343,20 @@ public final class SearchView extends JFrame {
         updateFolderFieldState();
     }
 
+    /**
+     * Bindet das Model an den StatusUpdater.
+     */
     private void bindModel() {
         model.addPropertyChangeListener(statusUpdater::onModelChange);
     }
 
+    /**
+     * Speichert die aktuellen Filter- und Sucheinstellungen in einer Properties-Datei.
+     */
     private void saveExtensionsToSettings() {
         try {
-            final Properties properties = new java.util.Properties();
+            final Properties properties = new Properties();
 
-            // store includes/excludes with their enabled flags
             properties.put("includes", mapToString(knownIncludes));
             properties.put("excludes", mapToString(knownExcludes));
             properties.put("includesCase", mapToString(knownIncludesCase));
@@ -283,145 +369,152 @@ public final class SearchView extends JFrame {
             properties.put("caseSensitive", Boolean.toString(topPanel.getCaseSensitiveCheck().isSelected()));
             properties.put("drives", String.join(",", drivePanel.getSelectedDrives()));
 
-            java.io.File file = settingsFile.toFile();
-            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
-                properties.store(fos, "SearchMax Filter Settings");
+            final File file = settingsFile.toFile();
+            try (final FileOutputStream fileOutputStream = new FileOutputStream(file)) {
+                properties.store(fileOutputStream, "SearchMax Filter Settings");
             }
-        } catch (Exception e) {
-            log.warn("Fehler beim Speichern der Filtereinstellungen", e);
+        } catch (final Exception exception) {
+            log.warn("Fehler beim Speichern der Filtereinstellungen", exception);
         }
     }
 
-    private String mapToString(Map<String, Boolean> map) {
+    /**
+     * Wandelt eine Map in einen String um, der für die Speicherung in Properties geeignet ist.
+     *
+     * @param map Die zu konvertierende Map
+     * @return String-Repräsentation der Map
+     */
+    private String mapToString(final Map<String, Boolean> map) {
         final StringBuilder stringBuilder = new StringBuilder();
-        for (Map.Entry<String, Boolean> entry : map.entrySet()) {
+        for (final Map.Entry<String, Boolean> entry : map.entrySet()) {
             stringBuilder.append(entry.getKey()).append("=").append(entry.getValue()).append(";");
         }
 
         return stringBuilder.toString();
     }
 
-    // neue Methode: lade Einstellungen beim Start
+    /**
+     * Lädt die gespeicherten Einstellungen aus der Properties-Datei und übernimmt sie in die UI und Filter-Maps.
+     */
     private void loadSettings() {
         try {
-            java.io.File file = settingsFile.toFile();
-            if (!file.exists()) return;
-            final Properties properties = new Properties();
-            try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
-                properties.load(fis);
+            final File file = settingsFile.toFile();
+            if (!file.exists()) {
+                return;
             }
 
-            String startFolder = properties.getProperty("startFolder", "").trim();
-            if (!startFolder.isEmpty()) topPanel.getFolderField().setText(startFolder);
+            final Properties properties = new Properties();
+            try (final FileInputStream fileInputStream = new FileInputStream(file)) {
+                properties.load(fileInputStream);
+            }
 
-            String q = properties.getProperty("query", "").trim();
-            if (!q.isEmpty()) topPanel.getQueryField().setText(q);
+            final String startFolder = properties.getProperty("startFolder", "").trim();
+            if (!startFolder.isEmpty()) {
+                topPanel.getFolderField().setText(startFolder);
+            }
 
-            String caseStr = properties.getProperty("caseSensitive", "false").trim();
-            topPanel.getCaseSensitiveCheck().setSelected("true".equalsIgnoreCase(caseStr));
+            final String query = properties.getProperty("query", "").trim();
+            if (!query.isEmpty()) {
+                topPanel.getQueryField().setText(query);
+            }
 
-            String drives = properties.getProperty("drives", "").trim();
+            final String caseString = properties.getProperty("caseSensitive", "false").trim();
+            topPanel.getCaseSensitiveCheck().setSelected("true".equalsIgnoreCase(caseString));
+
+            final String drives = properties.getProperty("drives", "").trim();
             if (!drives.isEmpty()) {
                 String[] parts = drives.split(",");
-                java.util.List<String> dl = new java.util.ArrayList<>();
-                for (String p : parts) {
-                    String t = p.trim();
-                    if (!t.isEmpty()) dl.add(t);
-                }
-                drivePanel.setSelectedDrives(dl);
-            }
+                List<String> driveList = new java.util.ArrayList<>();
 
-            String inc = properties.getProperty("includes", "").trim();
-            if (!inc.isEmpty()) {
-                if (inc.contains("=") || inc.contains(";")) {
-                    Map<String, Boolean> m = stringToMapBoolean(inc);
-                    knownIncludes.clear();
-                    knownIncludes.putAll(m);
-                } else {
-                    String[] parts = inc.split(",");
-                    for (String p : parts) {
-                        String t = p.trim();
-                        if (!t.isEmpty()) knownIncludes.put(t, true);
+                for (String part : parts) {
+                    String trimmedPart = part.trim();
+                    if (!trimmedPart.isEmpty()) {
+                        driveList.add(trimmedPart);
                     }
                 }
+
+                drivePanel.setSelectedDrives(driveList);
             }
 
-            String exc = properties.getProperty("excludes", "").trim();
-            if (!exc.isEmpty()) {
-                if (exc.contains("=") || exc.contains(";")) {
-                    Map<String, Boolean> m = stringToMapBoolean(exc);
-                    knownExcludes.clear();
-                    knownExcludes.putAll(m);
-                } else {
-                    String[] parts = exc.split(",");
-                    for (String p : parts) {
-                        String t = p.trim();
-                        if (!t.isEmpty()) knownExcludes.put(t, true);
-                    }
-                }
-            }
+            final String includes = properties.getProperty("includes", "").trim();
+            parseFilterString(includes, knownIncludes);
 
-            String incCase = properties.getProperty("includesCase", "").trim();
-            if (!incCase.isEmpty()) {
-                Map<String, Boolean> m = stringToMapBoolean(incCase);
+            final String excludes = properties.getProperty("excludes", "").trim();
+            parseFilterString(excludes, knownExcludes);
+
+            final String includeCase = properties.getProperty("includesCase", "").trim();
+            if (!includeCase.isEmpty()) {
+                final Map<String, Boolean> booleanMap = stringToMapBoolean(includeCase);
                 knownIncludesCase.clear();
-                knownIncludesCase.putAll(m);
+                knownIncludesCase.putAll(booleanMap);
             }
-            String excCase = properties.getProperty("excludesCase", "").trim();
-            if (!excCase.isEmpty()) {
-                Map<String, Boolean> m = stringToMapBoolean(excCase);
+
+            final String excludeCase = properties.getProperty("excludesCase", "").trim();
+            if (!excludeCase.isEmpty()) {
+                final Map<String, Boolean> booleanMap = stringToMapBoolean(excludeCase);
                 knownExcludesCase.clear();
-                knownExcludesCase.putAll(m);
+                knownExcludesCase.putAll(booleanMap);
             }
 
-            String allow = properties.getProperty("extensionsAllow", "").trim();
-            if (!allow.isEmpty()) {
-                if (allow.contains("=") || allow.contains(";")) {
-                    Map<String, Boolean> m = stringToMapBoolean(allow);
-                    knownExtensionsAllow.clear();
-                    knownExtensionsAllow.putAll(m);
-                } else {
-                    String[] parts = allow.split(",");
-                    for (String p : parts) {
-                        String t = p.trim();
-                        if (!t.isEmpty()) knownExtensionsAllow.put(t, true);
-                    }
-                }
-            }
-            String deny = properties.getProperty("extensionsDeny", "").trim();
-            if (!deny.isEmpty()) {
-                if (deny.contains("=") || deny.contains(";")) {
-                    Map<String, Boolean> m = stringToMapBoolean(deny);
-                    knownExtensionsDeny.clear();
-                    knownExtensionsDeny.putAll(m);
-                } else {
-                    String[] parts = deny.split(",");
-                    for (String p : parts) {
-                        String t = p.trim();
-                        if (!t.isEmpty()) knownExtensionsDeny.put(t, true);
-                    }
-                }
-            }
-
-        } catch (Exception e) {
-            log.warn("Fehler beim Laden der Filtereinstellungen", e);
+            final String allow = properties.getProperty("extensionsAllow", "").trim();
+            parseFilterString(allow, knownExtensionsAllow);
+            final String deny = properties.getProperty("extensionsDeny", "").trim();
+            parseFilterString(deny, knownExtensionsDeny);
+        } catch (final Exception exception) {
+            log.warn("Fehler beim Laden der Filtereinstellungen", exception);
         }
     }
 
-    private Map<String, Boolean> stringToMapBoolean(String s) {
-        Map<String, Boolean> out = new LinkedHashMap<>();
-        String[] parts = s.split(";");
-        for (String p : parts) {
-            String t = p.trim();
-            if (t.isEmpty()) continue;
-            int idx = t.indexOf('=');
-            if (idx <= 0) continue;
-            String k = t.substring(0, idx);
-            String v = t.substring(idx + 1);
-            out.put(k, Boolean.TRUE.toString().equalsIgnoreCase(v) || "true".equalsIgnoreCase(v));
+    /**
+     * Parst einen Filter-String und überträgt die Werte in die Ziel-Map.
+     *
+     * @param filterString Der zu parsende String
+     * @param targetMap    Die Ziel-Map
+     */
+    private void parseFilterString(final String filterString, final Map<String, Boolean> targetMap) {
+        if (!filterString.isEmpty()) {
+            if (filterString.contains("=") || filterString.contains(";")) {
+                final Map<String, Boolean> booleanMap = stringToMapBoolean(filterString);
+                targetMap.clear();
+                targetMap.putAll(booleanMap);
+            } else {
+                final String[] parts = filterString.split(",");
+                for (String part : parts) {
+                    String trimmedPart = part.trim();
+                    if (!trimmedPart.isEmpty()) {
+                        targetMap.put(trimmedPart, true);
+                    }
+                }
+            }
         }
-        return out;
     }
 
+    /**
+     * Wandelt einen String im Format "key=value;..." in eine Map um.
+     *
+     * @param string Der zu parsende String
+     * @return Die erzeugte Map
+     */
+    private Map<String, Boolean> stringToMapBoolean(final String string) {
+        final Map<String, Boolean> linkedHashMap = new LinkedHashMap<>();
+        final String[] parts = string.split(";");
+        for (final String part : parts) {
+            String trimmedPart = part.trim();
+            if (trimmedPart.isEmpty()) {
+                continue;
+            }
+
+            int index = trimmedPart.indexOf('=');
+            if (index <= 0) {
+                continue;
+            }
+
+            String key = trimmedPart.substring(0, index);
+            String value = trimmedPart.substring(index + 1);
+            linkedHashMap.put(key, Boolean.TRUE.toString().equalsIgnoreCase(value) || "true".equalsIgnoreCase(value));
+        }
+
+        return linkedHashMap;
+    }
 
 }
