@@ -23,6 +23,7 @@ public final class CenterPanel extends JPanel {
         resultList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         add(new JScrollPane(resultList), BorderLayout.CENTER);
 
+        // TODO: das angeklickte item in der liste von den gefundenen dateien wird nicht korrekt ausgewählt
         resultList.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
