@@ -1,57 +1,99 @@
 package com.mlprograms.searchmax.view;
 
-import javax.swing.*;
-import java.awt.*;
+import lombok.RequiredArgsConstructor;
 
+import javax.swing.*;
+import java.beans.PropertyChangeEvent;
+
+/**
+ * Aktualisiert den Statusbereich der Benutzeroberfläche basierend auf Änderungen im Modell.
+ * Zeigt eine animierte Statusmeldung an, wenn eine Suche läuft.
+ */
+@RequiredArgsConstructor
 public final class StatusUpdater {
+
+    /**
+     * Text, der angezeigt wird, wenn die Suche läuft.
+     */
     private static final String SEARCH_RUNNING_TEXT = "Suche läuft";
-    private final SearchView parent;
+    /**
+     * Referenz auf die zu aktualisierende Suchansicht.
+     */
+    private final SearchView searchView;
+    /**
+     * Timer für die animierten Punkte im Statuslabel.
+     */
     private Timer dotTimer;
+    /**
+     * Zählt die Anzahl der Punkte für die Animation.
+     */
     private int dotCount = 0;
 
-    public StatusUpdater(SearchView parent) {
-        this.parent = parent;
-    }
-
-    public void onModelChange(java.beans.PropertyChangeEvent evt) {
-        switch (evt.getPropertyName()) {
+    /**
+     * Wird aufgerufen, wenn sich das Modell ändert.
+     * Aktualisiert die Ergebnisliste oder den Statusbereich je nach Property.
+     *
+     * @param propertyChangeEvent das Ereignis, das die Änderung beschreibt
+     */
+    public void onModelChange(final PropertyChangeEvent propertyChangeEvent) {
+        switch (propertyChangeEvent.getPropertyName()) {
             case "results" -> SwingUtilities.invokeLater(() -> {
-                parent.getCenterPanel().getListModel().clear();
-                Object newVal = evt.getNewValue();
-                if (newVal instanceof java.util.List<?> list) {
-                    for (Object o : list) {
-                        if (o instanceof String s) parent.getCenterPanel().getListModel().addElement(s);
+                searchView.getCenterPanel().getListModel().clear();
+
+                final Object newValue = propertyChangeEvent.getNewValue();
+                if (newValue instanceof java.util.List<?> list) {
+                    for (final Object object : list) {
+                        if (object instanceof String string) {
+                            searchView.getCenterPanel().getListModel().addElement(string);
+                        }
                     }
                 }
             });
-            case "status" -> SwingUtilities.invokeLater(() -> updateStatus((String) evt.getNewValue()));
+            case "status" -> SwingUtilities.invokeLater(() -> updateStatus((String) propertyChangeEvent.getNewValue()));
         }
     }
 
-    private void updateStatus(String newStatus) {
-        boolean runningNow = newStatus != null && newStatus.startsWith(SEARCH_RUNNING_TEXT);
+    /**
+     * Aktualisiert den Statusbereich und steuert die Animation.
+     *
+     * @param newStatus der neue Status-Text
+     */
+    private void updateStatus(final String newStatus) {
+        final boolean runningNow = newStatus != null && newStatus.startsWith(SEARCH_RUNNING_TEXT);
         if (runningNow) {
             startDotAnimation();
         } else {
             stopDotAnimation();
         }
-        parent.getBottomPanel().getStatusLabel().setText(newStatus);
-        parent.updateButtons(runningNow);
+
+        searchView.getBottomPanel().getStatusLabel().setText(newStatus);
+        searchView.updateButtons(runningNow);
     }
 
+    /**
+     * Startet die Animation der Punkte im Statuslabel.
+     */
     private void startDotAnimation() {
         if (dotTimer == null) {
-            dotTimer = new Timer(500, e -> {
+            dotTimer = new Timer(250, e -> {
                 dotCount = (dotCount + 1) % 4;
-                parent.getBottomPanel().getStatusLabel().setText(SEARCH_RUNNING_TEXT + ".".repeat(dotCount));
+                searchView.getBottomPanel().getStatusLabel().setText(SEARCH_RUNNING_TEXT + ".".repeat(dotCount));
             });
+
             dotTimer.setInitialDelay(0);
         }
+
         dotTimer.start();
     }
 
+    /**
+     * Stoppt die Animation der Punkte und setzt den Zähler zurück.
+     */
     private void stopDotAnimation() {
-        if (dotTimer != null && dotTimer.isRunning()) dotTimer.stop();
+        if (dotTimer != null && dotTimer.isRunning()) {
+            dotTimer.stop();
+        }
+
         dotCount = 0;
     }
 
