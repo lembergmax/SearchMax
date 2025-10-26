@@ -23,7 +23,7 @@ public final class DrivePanel extends JPanel {
         for (int i = 0; i < roots.length; i++) {
             final JCheckBox box = new JCheckBox(roots[i].getPath());
             box.setSelected(false);
-            box.addActionListener(e -> parent.getTopPanel().updateFolderFieldState());
+            box.addActionListener(e -> this.parent.getTopPanel().updateFolderFieldState());
             driveCheckBoxes[i] = box;
             add(box);
         }
@@ -34,6 +34,12 @@ public final class DrivePanel extends JPanel {
                 .filter(AbstractButton::isSelected)
                 .map(AbstractButton::getText)
                 .collect(Collectors.toList());
+    }
+
+    public void setDrivesEnabled(boolean enabled) {
+        for (JCheckBox cb : driveCheckBoxes) {
+            cb.setEnabled(enabled);
+        }
     }
 
 }

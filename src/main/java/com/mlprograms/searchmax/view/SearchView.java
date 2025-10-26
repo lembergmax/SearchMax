@@ -234,12 +234,14 @@ public final class SearchView extends JFrame {
         if (running) {
             topPanel.getFolderField().setEnabled(false);
             topPanel.getBrowseButton().setEnabled(false);
+            drivePanel.setDrivesEnabled(false);
             return;
         }
 
         boolean anyDriveSelected = !drivePanel.getSelectedDrives().isEmpty();
         topPanel.getFolderField().setEnabled(!anyDriveSelected);
         topPanel.getBrowseButton().setEnabled(!anyDriveSelected);
+        drivePanel.setDrivesEnabled(true);
     }
 
     void updateButtons(final boolean running) {
@@ -249,6 +251,7 @@ public final class SearchView extends JFrame {
         topPanel.getQueryField().setEnabled(!running);
         topPanel.getCaseSensitiveCheck().setEnabled(!running);
         topPanel.getManageFiltersButton().setEnabled(!running);
+        drivePanel.setDrivesEnabled(!running);
         updateFolderFieldState();
     }
 
