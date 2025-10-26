@@ -113,8 +113,6 @@ public class FiltersTableModel extends AbstractTableModel {
         } else if (columnIndex == 3 && aValue instanceof Boolean) {
             e.exclude = (Boolean) aValue;
             fireTableCellUpdated(rowIndex, columnIndex);
-        } else if (columnIndex == 4) {
-            removeAt(rowIndex);
         }
     }
 
