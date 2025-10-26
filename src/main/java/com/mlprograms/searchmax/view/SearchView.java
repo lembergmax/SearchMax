@@ -270,18 +270,17 @@ public final class SearchView extends JFrame {
         try {
             final Properties properties = new java.util.Properties();
 
-            properties.put("includes", String.join(",", knownIncludes.keySet()));
-            properties.put("excludes", String.join(",", knownExcludes.keySet()));
+            // store includes/excludes with their enabled flags
+            properties.put("includes", mapToString(knownIncludes));
+            properties.put("excludes", mapToString(knownExcludes));
             properties.put("includesCase", mapToString(knownIncludesCase));
             properties.put("excludesCase", mapToString(knownExcludesCase));
-            properties.put("extensionsAllow", String.join(",", knownExtensionsAllow.keySet()));
-            properties.put("extensionsDeny", String.join(",", knownExtensionsDeny.keySet()));
+            properties.put("extensionsAllow", mapToString(knownExtensionsAllow));
+            properties.put("extensionsDeny", mapToString(knownExtensionsDeny));
 
-            // additional top-panel settings
             properties.put("startFolder", topPanel.getFolderField().getText() == null ? "" : topPanel.getFolderField().getText());
             properties.put("query", topPanel.getQueryField().getText() == null ? "" : topPanel.getQueryField().getText());
             properties.put("caseSensitive", Boolean.toString(topPanel.getCaseSensitiveCheck().isSelected()));
-            // drives
             properties.put("drives", String.join(",", drivePanel.getSelectedDrives()));
 
             java.io.File file = settingsFile.toFile();
@@ -334,18 +333,31 @@ public final class SearchView extends JFrame {
 
             String inc = properties.getProperty("includes", "").trim();
             if (!inc.isEmpty()) {
-                String[] parts = inc.split(",");
-                for (String p : parts) {
-                    String t = p.trim();
-                    if (!t.isEmpty()) knownIncludes.put(t, true);
+                if (inc.contains("=") || inc.contains(";")) {
+                    Map<String, Boolean> m = stringToMapBoolean(inc);
+                    knownIncludes.clear();
+                    knownIncludes.putAll(m);
+                } else {
+                    String[] parts = inc.split(",");
+                    for (String p : parts) {
+                        String t = p.trim();
+                        if (!t.isEmpty()) knownIncludes.put(t, true);
+                    }
                 }
             }
+
             String exc = properties.getProperty("excludes", "").trim();
             if (!exc.isEmpty()) {
-                String[] parts = exc.split(",");
-                for (String p : parts) {
-                    String t = p.trim();
-                    if (!t.isEmpty()) knownExcludes.put(t, true);
+                if (exc.contains("=") || exc.contains(";")) {
+                    Map<String, Boolean> m = stringToMapBoolean(exc);
+                    knownExcludes.clear();
+                    knownExcludes.putAll(m);
+                } else {
+                    String[] parts = exc.split(",");
+                    for (String p : parts) {
+                        String t = p.trim();
+                        if (!t.isEmpty()) knownExcludes.put(t, true);
+                    }
                 }
             }
 
@@ -364,18 +376,30 @@ public final class SearchView extends JFrame {
 
             String allow = properties.getProperty("extensionsAllow", "").trim();
             if (!allow.isEmpty()) {
-                String[] parts = allow.split(",");
-                for (String p : parts) {
-                    String t = p.trim();
-                    if (!t.isEmpty()) knownExtensionsAllow.put(t, true);
+                if (allow.contains("=") || allow.contains(";")) {
+                    Map<String, Boolean> m = stringToMapBoolean(allow);
+                    knownExtensionsAllow.clear();
+                    knownExtensionsAllow.putAll(m);
+                } else {
+                    String[] parts = allow.split(",");
+                    for (String p : parts) {
+                        String t = p.trim();
+                        if (!t.isEmpty()) knownExtensionsAllow.put(t, true);
+                    }
                 }
             }
             String deny = properties.getProperty("extensionsDeny", "").trim();
             if (!deny.isEmpty()) {
-                String[] parts = deny.split(",");
-                for (String p : parts) {
-                    String t = p.trim();
-                    if (!t.isEmpty()) knownExtensionsDeny.put(t, true);
+                if (deny.contains("=") || deny.contains(";")) {
+                    Map<String, Boolean> m = stringToMapBoolean(deny);
+                    knownExtensionsDeny.clear();
+                    knownExtensionsDeny.putAll(m);
+                } else {
+                    String[] parts = deny.split(",");
+                    for (String p : parts) {
+                        String t = p.trim();
+                        if (!t.isEmpty()) knownExtensionsDeny.put(t, true);
+                    }
                 }
             }
 
