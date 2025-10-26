@@ -5,6 +5,7 @@ import com.mlprograms.searchmax.service.SearchEventListener;
 import com.mlprograms.searchmax.service.SearchService;
 
 import javax.swing.SwingUtilities;
+import com.mlprograms.searchmax.view.GuiConstants;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,12 @@ public class SearchController implements SearchEventListener {
 
     private final ConcurrentLinkedQueue<String> pendingResults = new ConcurrentLinkedQueue<>();
     private final ScheduledExecutorService flushScheduler;
+    // Executor für das Starten von Suchvorgängen, damit die UI-Thread nicht blockiert wird
+    private final ExecutorService searchExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "search-starter");
+        t.setDaemon(true);
+        return t;
+    });
     private volatile int batchSize = 100;
 
     public SearchController(SearchService service, SearchModel model) {
@@ -33,10 +40,17 @@ public class SearchController implements SearchEventListener {
     public void startSearch(final String folder, final String query, final List<String> drives, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final Map<String, Boolean> includesCase, final List<String> excludes, final Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode) {
         pendingResults.clear();
         model.clearResults();
-        model.setStatus("Suche läuft...");
+        model.setStatus(GuiConstants.SEARCH_RUNNING_TEXT);
 
-        // Always call the service overload that accepts includeAllMode and content filters.
-        service.search(folder, query, drives, this, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+        // Starte die eigentliche Suche asynchron, sonst blockiert ggf. die EDT und die UI wird nicht aktualisiert
+        searchExecutor.submit(() -> {
+            try {
+                service.search(folder, query, drives, this, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+            } catch (Exception ex) {
+                // Fehler zurück an das UI-Model geben
+                SwingUtilities.invokeLater(() -> model.setStatus("Fehler: " + ex.getMessage()));
+            }
+        });
     }
 
     public boolean cancelSearch() {

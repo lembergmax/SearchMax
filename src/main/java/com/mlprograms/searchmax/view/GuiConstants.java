@@ -11,13 +11,14 @@ public final class GuiConstants {
     public static final String DRIVE_PANEL_TITLE = "Search Drives";
 
     // TopPanel
-    public static final String BROWSE_BUTTON = "Browse...";
+    public static final String BROWSE_BUTTON = "Browse";
     public static final String CASE_SENSITIVE = "Match case";
     public static final String SEARCH_BUTTON = "Search";
     public static final String CANCEL_BUTTON = "Cancel";
-    public static final String MANAGE_FILTERS = "Manage filters...";
+    public static final String MANAGE_FILTERS = "Manage filters";
     public static final String LABEL_FOLDER = "Folder";
     public static final String LABEL_SEARCHTEXT = "Search text";
+    public static final String FILES_FOUND = "Files found";
 
     // SearchView / JFileChooser / JOptionPane messages
     public static final String CHOOSER_SELECT_FOLDER = "Select folder";
@@ -30,7 +31,7 @@ public final class GuiConstants {
     public static final String STATUS_READY = "Ready";
     public static final String PERFORMANCE_MODE = "Performance mode";
     public static final String STATUS_LABEL_PREFIX = "Status: ";
-    public static final String SEARCH_RUNNING_TEXT = "Searching...";
+    public static final String SEARCH_RUNNING_TEXT = "Searching";
 
     // FiltersDialog
     public static final String FILTERS_DIALOG_TITLE = "Manage filename filters";
