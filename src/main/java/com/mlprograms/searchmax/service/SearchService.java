@@ -55,28 +55,25 @@ public final class SearchService {
         startSearch(folderPath, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
     }
 
-    public boolean cancel(String searchId) {
-        if (searchId == null) {
-            return false;
-        }
-
-        final SearchHandle handle = searches.remove(searchId);
-        if (handle == null) {
-            return false;
-        }
-
+    public boolean cancel() {
+        boolean any = false;
         try {
-            handle.getCancelled().set(true);
-            for (final ForkJoinTask<?> forkJoinTask : handle.getTasks()) {
-                if (forkJoinTask != null) {
-                    forkJoinTask.cancel(true);
+            for (final java.util.Map.Entry<String, SearchHandle> e : searches.entrySet()) {
+                final SearchHandle handle = e.getValue();
+                if (handle == null) continue;
+                any = true;
+                handle.getCancelled().set(true);
+                for (final ForkJoinTask<?> forkJoinTask : handle.getTasks()) {
+                    if (forkJoinTask != null) {
+                        forkJoinTask.cancel(true);
+                    }
                 }
             }
-
-            return true;
+            searches.clear();
+            return any;
         } catch (Exception e) {
-            log.warn("Fehler beim Abbrechen der Suche: " + searchId, e);
-            return false;
+            log.warn("Fehler beim Abbrechen der Suchen", e);
+            return any;
         }
     }
 
@@ -119,7 +116,6 @@ public final class SearchService {
         final SearchHandle handle = createSearchHandle(startNano, roots.length);
 
         searches.put(searchId, handle);
-        listener.onId(searchId);
 
         for (File root : roots) {
             final Path rootPath = root.toPath();
@@ -145,7 +141,6 @@ public final class SearchService {
         final SearchHandle handle = createSearchHandle(startNano, tokens.length);
 
         searches.put(searchId, handle);
-        listener.onId(searchId);
 
         for (String raw : tokens) {
             final String t = raw == null ? "" : raw.trim();
@@ -177,7 +172,6 @@ public final class SearchService {
         final SearchHandle handle = createSearchHandle(startNano, drives.size());
 
         searches.put(searchId, handle);
-        listener.onId(searchId);
 
         for (String raw : drives) {
             final String t = raw == null ? "" : raw.trim();
@@ -211,7 +205,6 @@ public final class SearchService {
         }
 
         final String searchId = UUID.randomUUID().toString();
-        listener.onId(searchId);
 
         final long startNano = System.nanoTime();
         final SearchHandle handle = createSearchHandle(startNano, 1);

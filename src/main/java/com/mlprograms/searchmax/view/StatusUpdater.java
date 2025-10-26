@@ -17,12 +17,14 @@ public final class StatusUpdater {
         switch (evt.getPropertyName()) {
             case "results" -> SwingUtilities.invokeLater(() -> {
                 parent.getCenterPanel().getListModel().clear();
-                ((java.util.List<String>) evt.getNewValue()).forEach(parent.getCenterPanel().getListModel()::addElement);
+                Object newVal = evt.getNewValue();
+                if (newVal instanceof java.util.List<?> list) {
+                    for (Object o : list) {
+                        if (o instanceof String s) parent.getCenterPanel().getListModel().addElement(s);
+                    }
+                }
             });
             case "status" -> SwingUtilities.invokeLater(() -> updateStatus((String) evt.getNewValue()));
-            case "id" -> SwingUtilities.invokeLater(() -> {
-                parent.getBottomPanel().getIdLabel().setText(evt.getNewValue() == null ? "-" : evt.getNewValue().toString());
-            });
         }
     }
 

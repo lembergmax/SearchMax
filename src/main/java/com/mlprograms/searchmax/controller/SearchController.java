@@ -21,30 +21,20 @@ public class SearchController implements SearchEventListener {
     public void startSearch(final String folder, final String query, final List<String> drives, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final Map<String, Boolean> includesCase, final List<String> excludes, final Map<String, Boolean> excludesCase) {
         model.clearResults();
         model.setStatus("Suche läuft...");
-        model.setId(null);
 
         service.search(folder, query, drives, this, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
     }
 
     public boolean cancelSearch() {
-        String id = model.getId();
-        if (id == null) {
+        boolean ok = service.cancel();
+        if (!ok) {
             model.setStatus("Keine laufende Suche");
             return false;
         }
 
-        boolean ok = service.cancel(id);
         model.setStatus(ok ? "Suche abgebrochen" : "Abbruch fehlgeschlagen");
-        if (ok) {
-            model.setId(null);
-        }
 
         return ok;
-    }
-
-    @Override
-    public void onId(String id) {
-        SwingUtilities.invokeLater(() -> model.setId(id));
     }
 
     @Override
