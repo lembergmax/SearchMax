@@ -1,7 +1,6 @@
 package com.mlprograms.searchmax;
 
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 
 import java.util.Collection;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -15,7 +14,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Trefferanzahl und Suchergebnisse.
  */
 @Getter
-@RequiredArgsConstructor
 public final class SearchHandle {
 
     /**
@@ -54,6 +52,21 @@ public final class SearchHandle {
     private final Collection<String> results;
 
     /**
+     * Anzahl der anfänglichen Aufgaben.
+     */
+    private final int initialTasks;
+
+    /**
+     * Zähler für insgesamt verarbeitete Dateien.
+     */
+    private final AtomicInteger totalFiles = new AtomicInteger(0);
+
+    /**
+     * Zähler für aktuell verarbeitete Dateien.
+     */
+    private final AtomicInteger processedFiles = new AtomicInteger(0);
+
+    /**
      * Erstellt ein neues SearchHandle mit den gegebenen Parametern.
      *
      * @param task           Die Hauptaufgabe der Suche
@@ -61,12 +74,14 @@ public final class SearchHandle {
      * @param remainingTasks Zähler für verbleibende Aufgaben
      * @param matchCount     Zähler für Treffer
      * @param results        Sammlung der Suchergebnisse
+     * @param initialTasks   Anzahl der anfänglichen Aufgaben
      */
-    public SearchHandle(final ForkJoinTask<?> task, final long startTimeNano, final AtomicInteger remainingTasks, final AtomicInteger matchCount, final Collection<String> results) {
+    public SearchHandle(final ForkJoinTask<?> task, final long startTimeNano, final AtomicInteger remainingTasks, final AtomicInteger matchCount, final Collection<String> results, final int initialTasks) {
         this.startNano = startTimeNano;
         this.remainingTasks = remainingTasks;
         this.matchCount = matchCount;
         this.results = results;
+        this.initialTasks = initialTasks;
         setTask(task);
     }
 
