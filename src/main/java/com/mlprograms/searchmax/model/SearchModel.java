@@ -13,12 +13,10 @@ public class SearchModel {
 
     public static final String PROP_RESULTS = "results";
     public static final String PROP_STATUS = "status";
-    public static final String PROP_ID = "id";
 
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
     private final List<String> results = new ArrayList<>();
     private String status = "Bereit";
-    private String id;
 
     public void addPropertyChangeListener(PropertyChangeListener l) {
         pcs.addPropertyChangeListener(l);
@@ -50,12 +48,6 @@ public class SearchModel {
         String old = this.status;
         this.status = status;
         pcs.firePropertyChange(PROP_STATUS, old, status);
-    }
-
-    public void setId(String id) {
-        String old = this.id;
-        this.id = id;
-        pcs.firePropertyChange(PROP_ID, old, id);
     }
 
 }
