@@ -50,7 +50,6 @@ public abstract class ExtensionsTableModelBase extends AbstractTableModel {
         if (r<0||r>=entries.size()) return; Entry e = entries.get(r);
         if (c==0 && val instanceof Boolean) { e.enabled=(Boolean)val; fireTableCellUpdated(r,c); }
         else if (c==1 && val instanceof String) { String v=((String)val).trim().toLowerCase(); if (v.isEmpty()) return; if (!v.startsWith(".")) v = "."+v; for (int i=0;i<entries.size();i++){ if (i==r) continue; if (entries.get(i).ext.equals(v)){ JOptionPane.showMessageDialog(null, "Endung existiert bereits.", "Fehler", JOptionPane.WARNING_MESSAGE); return; } } e.ext=v; fireTableCellUpdated(r,c); }
-        else if (c==2) { removeAt(r); }
     }
 
     public int getRemoveColumnIndex() { return 2; }

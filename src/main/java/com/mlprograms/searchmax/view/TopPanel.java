@@ -27,10 +27,11 @@ public final class TopPanel extends JPanel {
     private void setupUI() {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 4, 4, 4);
+
+        // --- Ordner Zeile ---
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.anchor = GridBagConstraints.WEST;
-
         add(new JLabel("Ordner"), gbc);
 
         gbc.gridx = 1;
@@ -43,14 +44,14 @@ public final class TopPanel extends JPanel {
         gbc.weightx = 0;
         add(browseButton, gbc);
 
-        // Drive panel auf eigene Zeile
+        // --- Drive Panel ---
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.gridwidth = 3;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         add(parent.getDrivePanel(), gbc);
 
-        // Suchtext-Row
+        // --- Suchtext Zeile ---
         gbc.gridy = 2;
         gbc.gridx = 0;
         gbc.gridwidth = 1;
@@ -66,22 +67,29 @@ public final class TopPanel extends JPanel {
         gbc.gridx = 2;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
+        add(manageFiltersButton, gbc);
+
+        // --- Buttons Zeile (Suchen / Abbrechen) ---
+        gbc.gridy = 3;
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL; // Buttons füllen horizontal
+        gbc.weightx = 0.5;                        // gleiche Breite
+        gbc.anchor = GridBagConstraints.CENTER;
         add(searchButton, gbc);
 
-        // Row mit Checkbox und weiteren Buttons
+        gbc.gridx = 2;
+        gbc.weightx = 0.5;
+        add(cancelButton, gbc);
+
+        // --- Case-Sensitive Checkbox ---
         gbc.gridy = 3;
         gbc.gridx = 0;
         gbc.gridwidth = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
         gbc.anchor = GridBagConstraints.WEST;
         add(caseSensitiveCheck, gbc);
-
-        gbc.gridx = 1;
-        gbc.anchor = GridBagConstraints.CENTER;
-        add(cancelButton, gbc);
-
-        gbc.gridx = 2;
-        gbc.anchor = GridBagConstraints.EAST;
-        add(manageFiltersButton, gbc);
     }
 
     public void addListeners() {

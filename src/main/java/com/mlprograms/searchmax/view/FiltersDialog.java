@@ -123,15 +123,12 @@ public class FiltersDialog extends JDialog {
         table.setFillsViewportHeight(true);
         table.setRowHeight(24);
         table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellRenderer(new ButtonCellRenderer());
-        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(() -> {
-            int r = table.getEditingRow();
-            if (r >= 0) model.removeAt(r);
-        }));
+        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(model::removeAt));
     }
 
     private Component createExtensionsPanel() {
         JPanel extPanel = new JPanel(new BorderLayout(4, 4));
-        extPanel.setBorder(BorderFactory.createTitledBorder("Dateiendungen (Suffix, z.B. .txt)"));
+        extPanel.setBorder(BorderFactory.createTitledBorder("Dateityp"));
 
         AllowExtensionsTableModel allowModel = new AllowExtensionsTableModel();
         DenyExtensionsTableModel denyModel = new DenyExtensionsTableModel();
@@ -163,7 +160,7 @@ public class FiltersDialog extends JDialog {
         extPanel.add(extBtnBar, BorderLayout.SOUTH);
 
         extAdd.addActionListener(e -> {
-            String raw = JOptionPane.showInputDialog(this, "Neue Dateiendung (z.B. .txt oder txt):", "Hinzufügen", JOptionPane.PLAIN_MESSAGE);
+            String raw = JOptionPane.showInputDialog(this, "Neuer Dateityp (z.B. .txt):", "Hinzufügen", JOptionPane.PLAIN_MESSAGE);
             if (raw != null) {
                 String t = raw.trim().toLowerCase();
                 if (t.isEmpty()) return;
@@ -251,10 +248,7 @@ public class FiltersDialog extends JDialog {
         table.setFillsViewportHeight(true);
         table.setRowHeight(24);
         table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellRenderer(new ButtonCellRenderer());
-        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(() -> {
-            int r = table.getEditingRow();
-            if (r >= 0) model.removeAt(r);
-        }));
+        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(model::removeAt));
     }
 
     private JPanel createBottomPanel() {

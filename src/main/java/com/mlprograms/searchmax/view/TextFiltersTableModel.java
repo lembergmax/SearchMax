@@ -1,7 +1,5 @@
 package com.mlprograms.searchmax.view;
 
-import lombok.Getter;
-
 import javax.swing.JOptionPane;
 import javax.swing.table.AbstractTableModel;
 import java.util.ArrayList;
@@ -20,9 +18,10 @@ public class TextFiltersTableModel extends AbstractTableModel {
         }
     }
 
-    @Getter
     private final List<Entry> entries = new ArrayList<>();
     private final String[] cols = {"Aktiv","Muster","Groß-/Kleinschreibung beachten",""};
+
+    public List<Entry> getEntries() { return entries; }
 
     public void addEntry(String p, boolean enabled) {
         for (Entry e : entries) if (e.pattern.equals(p)) return;
@@ -51,12 +50,12 @@ public class TextFiltersTableModel extends AbstractTableModel {
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
         Entry e = entries.get(rowIndex);
-        return switch (columnIndex) {
-            case 0 -> e.enabled;
-            case 1 -> e.pattern;
-            case 2 -> e.caseSensitive;
-            default -> "Entfernen";
-        };
+        switch (columnIndex) {
+            case 0: return e.enabled;
+            case 1: return e.pattern;
+            case 2: return e.caseSensitive;
+            default: return "Entfernen";
+        }
     }
 
     @Override
@@ -81,11 +80,8 @@ public class TextFiltersTableModel extends AbstractTableModel {
         } else if (columnIndex == 2 && aValue instanceof Boolean) {
             e.caseSensitive = (Boolean) aValue;
             fireTableCellUpdated(rowIndex, columnIndex);
-        } else if (columnIndex == 3) {
-            removeAt(rowIndex);
         }
     }
 
     public int getRemoveColumnIndex() { return 3; }
 }
-
