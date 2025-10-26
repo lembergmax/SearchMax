@@ -7,7 +7,8 @@ import java.util.Map;
 
 public class FiltersDialog extends JDialog {
 
-    private final FiltersTableModel filtersModel = new FiltersTableModel();
+    private final TextFiltersTableModel includesTextModel = new TextFiltersTableModel();
+    private final TextFiltersTableModel excludesTextModel = new TextFiltersTableModel();
     private final Map<String, Boolean> initialExtensionsAllow;
     private final Map<String, Boolean> initialExtensionsDeny;
     private final Map<String, Boolean> initialIncludesCase;
@@ -36,7 +37,7 @@ public class FiltersDialog extends JDialog {
                 if (k == null) continue;
                 String t = k.trim();
                 if (t.isEmpty()) continue;
-                filtersModel.addEntry(t, enabled, false);
+                includesTextModel.addEntry(t, enabled);
             }
         }
 
@@ -47,72 +48,85 @@ public class FiltersDialog extends JDialog {
                 if (k == null) continue;
                 String t = k.trim();
                 if (t.isEmpty()) continue;
-                filtersModel.addEntry(t, enabled, true);
+                excludesTextModel.addEntry(t, enabled);
             }
         }
     }
 
     private void applyCaseFlags() {
-        for (FiltersTableModel.Entry en : filtersModel.getEntries()) {
-            boolean cs = false;
-            if (!en.exclude) {
-                Boolean v = this.initialIncludesCase.get(en.pattern);
-                cs = Boolean.TRUE.equals(v);
-            } else {
-                Boolean v = this.initialExcludesCase.get(en.pattern);
-                cs = Boolean.TRUE.equals(v);
-            }
-            en.caseSensitive = cs;
+        for (TextFiltersTableModel.Entry en : includesTextModel.getEntries()) {
+            Boolean v = this.initialIncludesCase.get(en.pattern);
+            en.caseSensitive = Boolean.TRUE.equals(v);
+        }
+        for (TextFiltersTableModel.Entry en : excludesTextModel.getEntries()) {
+            Boolean v = this.initialExcludesCase.get(en.pattern);
+            en.caseSensitive = Boolean.TRUE.equals(v);
         }
     }
 
     private void initUI() {
         setLayout(new BorderLayout(8, 8));
         JPanel center = new JPanel(new GridLayout(1, 2, 8, 8));
-        center.add(createFiltersPanel());
+        center.add(createTextFiltersPanel());
         center.add(createExtensionsPanel());
         add(center, BorderLayout.CENTER);
         add(createBottomPanel(), BorderLayout.SOUTH);
         registerEscKey();
     }
 
-    private Component createFiltersPanel() {
-        JPanel fltPanel = new JPanel(new BorderLayout(4, 4));
-        fltPanel.setBorder(BorderFactory.createTitledBorder("Dateiname-Filter"));
-        JTable fltTable = new JTable(filtersModel);
-        fltTable.setFillsViewportHeight(true);
-        fltTable.setRowHeight(24);
-        fltTable.getColumnModel().getColumn(filtersModel.getRemoveColumnIndex()).setCellRenderer(new ButtonCellRenderer());
-        fltTable.getColumnModel().getColumn(filtersModel.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(() -> {
-            int r = fltTable.getEditingRow();
-            if (r >= 0) filtersModel.removeAt(r);
-        }));
-        fltPanel.add(new JScrollPane(fltTable), BorderLayout.CENTER);
+    private Component createTextFiltersPanel() {
+        JPanel panel = new JPanel(new BorderLayout(4, 4));
+        panel.setBorder(BorderFactory.createTitledBorder("Dateiname-Filter"));
 
-        JPanel fltBtnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
+        JTable includeTable = new JTable(includesTextModel);
+        configureTextTable(includeTable, includesTextModel);
+        JTable excludeTable = new JTable(excludesTextModel);
+        configureTextTable(excludeTable, excludesTextModel);
+
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.add("Zulassen", new JScrollPane(includeTable));
+        tabs.add("Ausschließen", new JScrollPane(excludeTable));
+
+        panel.add(tabs, BorderLayout.CENTER);
+
+        JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
         Dimension small = new Dimension(120, 24);
-        JButton fltAdd = new JButton("Hinzufügen");
-        fltAdd.setPreferredSize(small);
-        JButton fltEnableAll = new JButton("Alle aktivieren");
-        fltEnableAll.setPreferredSize(small);
-        JButton fltDisableAll = new JButton("Alle deaktivieren");
-        fltDisableAll.setPreferredSize(small);
-        fltBtnBar.add(fltAdd);
-        fltBtnBar.add(fltEnableAll);
-        fltBtnBar.add(fltDisableAll);
-        fltPanel.add(fltBtnBar, BorderLayout.SOUTH);
+        JButton add = new JButton("Hinzufügen"); add.setPreferredSize(small);
+        JButton enableAll = new JButton("Alle aktivieren"); enableAll.setPreferredSize(small);
+        JButton disableAll = new JButton("Alle deaktivieren"); disableAll.setPreferredSize(small);
+        btnBar.add(add); btnBar.add(enableAll); btnBar.add(disableAll);
+        panel.add(btnBar, BorderLayout.SOUTH);
 
-        fltAdd.addActionListener(e -> {
+        add.addActionListener(e -> {
             String raw = JOptionPane.showInputDialog(this, "Neues Muster (z.B. Teil des Dateinamens):", "Hinzufügen", JOptionPane.PLAIN_MESSAGE);
             if (raw != null) {
                 String t = raw.trim();
-                if (!t.isEmpty()) filtersModel.addEntry(t, true, false);
+                if (t.isEmpty()) return;
+                int idx = tabs.getSelectedIndex();
+                if (idx == 0) includesTextModel.addEntry(t, true); else excludesTextModel.addEntry(t, true);
             }
         });
-        fltEnableAll.addActionListener(e -> filtersModel.setAllEnabled(true));
-        fltDisableAll.addActionListener(e -> filtersModel.setAllEnabled(false));
 
-        return fltPanel;
+        enableAll.addActionListener(e -> {
+            int idx = tabs.getSelectedIndex();
+            if (idx == 0) includesTextModel.setAllEnabled(true); else excludesTextModel.setAllEnabled(true);
+        });
+        disableAll.addActionListener(e -> {
+            int idx = tabs.getSelectedIndex();
+            if (idx == 0) includesTextModel.setAllEnabled(false); else excludesTextModel.setAllEnabled(false);
+        });
+
+        return panel;
+    }
+
+    private void configureTextTable(JTable table, TextFiltersTableModel model) {
+        table.setFillsViewportHeight(true);
+        table.setRowHeight(24);
+        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellRenderer(new ButtonCellRenderer());
+        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(() -> {
+            int r = table.getEditingRow();
+            if (r >= 0) model.removeAt(r);
+        }));
     }
 
     private Component createExtensionsPanel() {
@@ -270,26 +284,26 @@ public class FiltersDialog extends JDialog {
     public boolean isConfirmed() { return confirmed; }
 
     public java.util.Map<String, Boolean> getIncludesMap() {
-        Map<String, Boolean> out = new LinkedHashMap<>();
-        for (FiltersTableModel.Entry en : filtersModel.getEntries()) if (!en.exclude) out.put(en.pattern, en.enabled);
+        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+        for (TextFiltersTableModel.Entry en : includesTextModel.getEntries()) out.put(en.pattern, en.enabled);
         return out;
     }
 
     public java.util.Map<String, Boolean> getIncludesCaseMap() {
-        Map<String, Boolean> out = new LinkedHashMap<>();
-        for (FiltersTableModel.Entry en : filtersModel.getEntries()) if (!en.exclude) out.put(en.pattern, en.caseSensitive);
+        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+        for (TextFiltersTableModel.Entry en : includesTextModel.getEntries()) out.put(en.pattern, en.caseSensitive);
         return out;
     }
 
     public java.util.Map<String, Boolean> getExcludesMap() {
-        Map<String, Boolean> out = new LinkedHashMap<>();
-        for (FiltersTableModel.Entry en : filtersModel.getEntries()) if (en.exclude) out.put(en.pattern, en.enabled);
+        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+        for (TextFiltersTableModel.Entry en : excludesTextModel.getEntries()) out.put(en.pattern, en.enabled);
         return out;
     }
 
     public java.util.Map<String, Boolean> getExcludesCaseMap() {
-        Map<String, Boolean> out = new LinkedHashMap<>();
-        for (FiltersTableModel.Entry en : filtersModel.getEntries()) if (en.exclude) out.put(en.pattern, en.caseSensitive);
+        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+        for (TextFiltersTableModel.Entry en : excludesTextModel.getEntries()) out.put(en.pattern, en.caseSensitive);
         return out;
     }
 
