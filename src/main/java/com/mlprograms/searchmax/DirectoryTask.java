@@ -428,7 +428,7 @@ public final class DirectoryTask extends RecursiveAction {
         final int cents = (int) (centis % 100L);
 
         final String pathString = filePath.toAbsolutePath().toString();
-        return String.format("[%d.%02d s] %s", whole, cents, pathString);
+        return String.format("[%d.%02ds] %s", whole, cents, pathString);
     }
 
     /**
