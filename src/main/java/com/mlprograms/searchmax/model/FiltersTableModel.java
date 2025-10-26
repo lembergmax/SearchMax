@@ -1,5 +1,7 @@
 package com.mlprograms.searchmax.model;
 
+import com.mlprograms.searchmax.view.GuiConstants;
+
 import javax.swing.JOptionPane;
 import javax.swing.table.AbstractTableModel;
 import java.util.ArrayList;
@@ -20,7 +22,7 @@ public class FiltersTableModel extends AbstractTableModel {
     }
 
     private final List<Entry> entries = new ArrayList<>();
-    private final String[] cols = {"Aktiv","Muster","Groß-/Kleinschreibung beachten","Ausschließen",""};
+    private final String[] cols = {GuiConstants.COLUMN_ACTIVE, GuiConstants.COLUMN_PATTERN, GuiConstants.COLUMN_CASE_SENSITIVE, GuiConstants.COLUMN_EXCLUDE, GuiConstants.COLUMN_REMOVE};
 
     public List<Entry> getEntries() {
         return entries;
@@ -84,7 +86,7 @@ public class FiltersTableModel extends AbstractTableModel {
             case 1: return e.pattern;
             case 2: return e.caseSensitive;
             case 3: return e.exclude;
-            default: return "Entfernen";
+            default: return GuiConstants.COLUMN_REMOVE;
         }
     }
 
@@ -101,7 +103,7 @@ public class FiltersTableModel extends AbstractTableModel {
             for (int i = 0; i < entries.size(); i++) {
                 if (i == rowIndex) continue;
                 if (entries.get(i).pattern.equals(v)) {
-                    JOptionPane.showMessageDialog(null, "Muster existiert bereits.", "Fehler", JOptionPane.WARNING_MESSAGE);
+                    JOptionPane.showMessageDialog(null, "Pattern already exists.", GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
                     return;
                 }
             }

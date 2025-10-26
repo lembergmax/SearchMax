@@ -52,4 +52,20 @@ public final class GuiConstants {
 
     public static final String BUTTON_OK = "OK";
 
+    // Content panel (neu)
+    public static final String CONTENT_PANEL_TITLE = "File content";
+    public static final String INPUT_ADD_CONTENT_PATTERN = "New content pattern (e.g. text inside file):";
+
+    // Table column constants (English)
+    public static final String COLUMN_ACTIVE = "Active";
+    public static final String COLUMN_PATTERN = "Pattern";
+    public static final String COLUMN_CASE_SENSITIVE = "Case sensitive";
+    public static final String COLUMN_REMOVE = "Remove";
+
+    // Extensions specific column
+    public static final String EXT_COLUMN_EXTENSION = "Extension";
+
+    // Additional column labels
+    public static final String COLUMN_EXCLUDE = "Exclude";
+
 }
