@@ -38,14 +38,35 @@ public final class StatusUpdater {
     public void onModelChange(final PropertyChangeEvent propertyChangeEvent) {
         switch (propertyChangeEvent.getPropertyName()) {
             case "results" -> SwingUtilities.invokeLater(() -> {
-                searchView.getCenterPanel().getListModel().clear();
-
+                final Object oldValue = propertyChangeEvent.getOldValue();
                 final Object newValue = propertyChangeEvent.getNewValue();
-                if (newValue instanceof java.util.List<?> list) {
-                    for (final Object object : list) {
-                        if (object instanceof String string) {
-                            searchView.getCenterPanel().getListModel().addElement(string);
-                        }
+                javax.swing.DefaultListModel<String> model = searchView.getCenterPanel().getListModel();
+
+                if (oldValue instanceof java.util.List<?> oldList && newValue instanceof java.util.List<?> newList) {
+                    int oldSize = oldList.size();
+                    for (int i = oldSize; i < newList.size(); i++) {
+                        Object obj = newList.get(i);
+                        if (obj instanceof String s) model.addElement(s);
+                    }
+                } else if (newValue instanceof java.util.List<?> list) {
+                    model.clear();
+                    for (Object object : list) {
+                        if (object instanceof String string) model.addElement(string);
+                    }
+                }
+            });
+            case "resultAdded" -> SwingUtilities.invokeLater(() -> {
+                final Object nv = propertyChangeEvent.getNewValue();
+                if (nv instanceof String s) {
+                    searchView.getCenterPanel().getListModel().addElement(s);
+                }
+            });
+            case "resultsBatch" -> SwingUtilities.invokeLater(() -> {
+                final Object nv = propertyChangeEvent.getNewValue();
+                if (nv instanceof java.util.List<?> list) {
+                    final DefaultListModel<String> model = searchView.getCenterPanel().getListModel();
+                    for (Object o : list) {
+                        if (o instanceof String s) model.addElement(s);
                     }
                 }
             });
