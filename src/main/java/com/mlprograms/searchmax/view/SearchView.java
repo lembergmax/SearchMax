@@ -91,6 +91,12 @@ public final class SearchView extends JFrame {
      * Gibt an, ob der Modus "Enthält alle" aktiv ist.
      */
     private boolean knownIncludesAllMode = false;
+    // Content filters
+    private final Map<String, Boolean> knownContentIncludes = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownContentExcludes = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownContentIncludesCase = new LinkedHashMap<>();
+    private final Map<String, Boolean> knownContentExcludesCase = new LinkedHashMap<>();
+    private boolean knownContentIncludesAllMode = false;
     private boolean useAllCores = false;
 
     /**
@@ -240,12 +246,20 @@ public final class SearchView extends JFrame {
         filterActiveEntries(includes, includesCase, knownIncludes, knownIncludesCase);
         filterActiveEntries(excludes, excludesCase, knownExcludes, knownExcludesCase);
 
+        // Content filters
+        final List<String> contentIncludes = new ArrayList<>();
+        final Map<String, Boolean> contentIncludesCase = new LinkedHashMap<>();
+        final List<String> contentExcludes = new ArrayList<>();
+        final Map<String, Boolean> contentExcludesCase = new LinkedHashMap<>();
+        filterActiveEntries(contentIncludes, contentIncludesCase, knownContentIncludes, knownContentIncludesCase);
+        filterActiveEntries(contentExcludes, contentExcludesCase, knownContentExcludes, knownContentExcludesCase);
+
         if (!selectedDrives.isEmpty()) {
-            if ((query == null || query.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
+            if ((query == null || query.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty() && contentIncludes.isEmpty() && contentExcludes.isEmpty()) {
                 JOptionPane.showMessageDialog(this, GuiConstants.MSG_ENTER_QUERY_OR_TYPE, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            controller.startSearch("", query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode);
+            controller.startSearch("", query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, knownContentIncludesAllMode);
             return;
         }
 
@@ -253,12 +267,12 @@ public final class SearchView extends JFrame {
             JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_START_FOLDER, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if ((query == null || query.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
+        if ((query == null || query.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty() && contentIncludes.isEmpty() && contentExcludes.isEmpty()) {
             JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_QUERY_OR_TYPE_OR_FILTER, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        controller.startSearch(folder.trim(), query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode);
+        controller.startSearch(folder.trim(), query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, knownContentIncludesAllMode);
     }
 
     /**
@@ -294,7 +308,7 @@ public final class SearchView extends JFrame {
      * Öffnet den Filter-Dialog und übernimmt ggf. die neuen Filtereinstellungen.
      */
     void onManageFilters() {
-        final FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase, knownIncludesAllMode);
+        final FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase, knownIncludesAllMode, knownContentIncludes, knownContentExcludes, knownContentIncludesCase, knownContentExcludesCase, knownContentIncludesAllMode);
         filtersDialog.setVisible(true);
 
         if (filtersDialog.isConfirmed()) {
@@ -304,6 +318,10 @@ public final class SearchView extends JFrame {
             Map<String, Boolean> excCase = filtersDialog.getExcludesCaseMap();
             Map<String, Boolean> extensionsAllow = filtersDialog.getExtensionsAllowMap();
             Map<String, Boolean> extensionsDeny = filtersDialog.getExtensionsDenyMap();
+            Map<String, Boolean> contentInclude = filtersDialog.getContentIncludesMap();
+            Map<String, Boolean> contentExclude = filtersDialog.getContentExcludesMap();
+            Map<String, Boolean> contentIncludeCase = filtersDialog.getContentIncludesCaseMap();
+            Map<String, Boolean> contentExcludeCase = filtersDialog.getContentExcludesCaseMap();
 
             knownIncludes.clear();
             knownIncludes.putAll(include);
@@ -314,12 +332,22 @@ public final class SearchView extends JFrame {
             knownExcludesCase.clear();
             knownExcludesCase.putAll(excCase);
 
+            knownContentIncludes.clear();
+            knownContentIncludes.putAll(contentInclude);
+            knownContentExcludes.clear();
+            knownContentExcludes.putAll(contentExclude);
+            knownContentIncludesCase.clear();
+            knownContentIncludesCase.putAll(contentIncludeCase);
+            knownContentExcludesCase.clear();
+            knownContentExcludesCase.putAll(contentExcludeCase);
+
             knownExtensionsAllow.clear();
             knownExtensionsAllow.putAll(extensionsAllow);
             knownExtensionsDeny.clear();
             knownExtensionsDeny.putAll(extensionsDeny);
 
             knownIncludesAllMode = filtersDialog.isIncludeAllMode();
+            knownContentIncludesAllMode = filtersDialog.isContentIncludeAllMode();
 
             saveExtensionsToSettings();
         }
@@ -374,12 +402,17 @@ public final class SearchView extends JFrame {
             properties.put("excludesCase", mapToString(knownExcludesCase));
             properties.put("extensionsAllow", mapToString(knownExtensionsAllow));
             properties.put("extensionsDeny", mapToString(knownExtensionsDeny));
+            properties.put("contentIncludes", mapToString(knownContentIncludes));
+            properties.put("contentExcludes", mapToString(knownContentExcludes));
+            properties.put("contentIncludesCase", mapToString(knownContentIncludesCase));
+            properties.put("contentExcludesCase", mapToString(knownContentExcludesCase));
 
             properties.put("startFolder", topPanel.getFolderField().getText() == null ? "" : topPanel.getFolderField().getText());
             properties.put("query", topPanel.getQueryField().getText() == null ? "" : topPanel.getQueryField().getText());
             properties.put("caseSensitive", Boolean.toString(topPanel.getCaseSensitiveCheck().isSelected()));
             properties.put("drives", String.join(",", drivePanel.getSelectedDrives()));
             properties.put("includesMode", knownIncludesAllMode ? "ALL" : "ANY");
+            properties.put("contentIncludesMode", knownContentIncludesAllMode ? "ALL" : "ANY");
             properties.put("useAllCores", Boolean.toString(useAllCores));
 
             final File file = settingsFile.toFile();
@@ -474,8 +507,30 @@ public final class SearchView extends JFrame {
             final String deny = properties.getProperty("extensionsDeny", "").trim();
             parseFilterString(deny, knownExtensionsDeny);
 
+            final String contentIncludes = properties.getProperty("contentIncludes", "").trim();
+            parseFilterString(contentIncludes, knownContentIncludes);
+            final String contentExcludes = properties.getProperty("contentExcludes", "").trim();
+            parseFilterString(contentExcludes, knownContentExcludes);
+
+            final String contentIncludeCase = properties.getProperty("contentIncludesCase", "").trim();
+            if (!contentIncludeCase.isEmpty()) {
+                final Map<String, Boolean> booleanMap = stringToMapBoolean(contentIncludeCase);
+                knownContentIncludesCase.clear();
+                knownContentIncludesCase.putAll(booleanMap);
+            }
+
+            final String contentExcludeCase = properties.getProperty("contentExcludesCase", "").trim();
+            if (!contentExcludeCase.isEmpty()) {
+                final Map<String, Boolean> booleanMap = stringToMapBoolean(contentExcludeCase);
+                knownContentExcludesCase.clear();
+                knownContentExcludesCase.putAll(booleanMap);
+            }
+
             String mode = properties.getProperty("includesMode", "ANY").trim();
             knownIncludesAllMode = "ALL".equalsIgnoreCase(mode);
+
+            String contentMode = properties.getProperty("contentIncludesMode", "ANY").trim();
+            knownContentIncludesAllMode = "ALL".equalsIgnoreCase(contentMode);
 
             String useAll = properties.getProperty("useAllCores", "false").trim();
             useAllCores = "true".equalsIgnoreCase(useAll);

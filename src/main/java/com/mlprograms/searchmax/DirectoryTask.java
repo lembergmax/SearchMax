@@ -119,6 +119,13 @@ public final class DirectoryTask extends RecursiveAction {
      */
     private final boolean includeAllMode;
 
+    // Neue Felder für Inhaltsfilter
+    private final List<String> contentIncludeFilters;
+    private final Map<String, Boolean> contentIncludeCaseMap;
+    private final List<String> contentExcludeFilters;
+    private final Map<String, Boolean> contentExcludeCaseMap;
+    private final boolean contentIncludeAllMode;
+
     /**
      * Erstellt eine neue DirectoryTask mit den angegebenen Parametern.
      *
@@ -139,6 +146,11 @@ public final class DirectoryTask extends RecursiveAction {
      * @param includeAllMode    Ob alle Include-Filter erfüllt sein müssen
      */
     public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode) {
+        this(directoryPath, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, null, null, null, null, false);
+    }
+
+    // Neuer Konstruktor mit Inhalts-Filter-Parametern
+    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode, final List<String> contentIncludeFilters, final Map<String, Boolean> contentIncludeCaseMap, final List<String> contentExcludeFilters, final Map<String, Boolean> contentExcludeCaseMap, final boolean contentIncludeAllMode) {
         this.directoryPath = directoryPath;
         this.result = (result == null) ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -156,6 +168,12 @@ public final class DirectoryTask extends RecursiveAction {
         this.excludeFilters = (excludeFilters == null || excludeFilters.isEmpty()) ? null : new ArrayList<>(excludeFilters);
         this.excludeCaseMap = (excludeCaseMap == null || excludeCaseMap.isEmpty()) ? null : new HashMap<>(excludeCaseMap);
         this.includeAllMode = includeAllMode;
+
+        this.contentIncludeFilters = (contentIncludeFilters == null || contentIncludeFilters.isEmpty()) ? null : new ArrayList<>(contentIncludeFilters);
+        this.contentIncludeCaseMap = (contentIncludeCaseMap == null || contentIncludeCaseMap.isEmpty()) ? null : new HashMap<>(contentIncludeCaseMap);
+        this.contentExcludeFilters = (contentExcludeFilters == null || contentExcludeFilters.isEmpty()) ? null : new ArrayList<>(contentExcludeFilters);
+        this.contentExcludeCaseMap = (contentExcludeCaseMap == null || contentExcludeCaseMap.isEmpty()) ? null : new HashMap<>(contentExcludeCaseMap);
+        this.contentIncludeAllMode = contentIncludeAllMode;
     }
 
     /**
@@ -221,7 +239,7 @@ public final class DirectoryTask extends RecursiveAction {
      * @return Neuer DirectoryTask für das Unterverzeichnis
      */
     private DirectoryTask createSubtask(Path subDir) {
-        return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode);
+        return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode);
     }
 
     /**
@@ -267,6 +285,10 @@ public final class DirectoryTask extends RecursiveAction {
         if (!matchesExtensions(fileName)) {
             return;
         }
+        // Neue Prüfung: Inhalt-Filter
+        if (!matchesContentFilters(filePath)) {
+            return;
+        }
 
         final String formatted = formatFileResult(filePath);
         result.add(formatted);
@@ -281,6 +303,102 @@ public final class DirectoryTask extends RecursiveAction {
             } catch (final Exception exception) {
                 log.debug("Emitter-Consumer warf Ausnahme für Datei {}: {}", filePath, exception.getMessage());
             }
+        }
+    }
+
+    // Prüft, ob der Pfad eine erlaubte Endung hat und keine ausgeschlossene.
+    private boolean matchesExtensions(final String fileName) {
+        final String lower = fileName.toLowerCase(Locale.ROOT);
+
+        if (deniedExtensions != null) {
+            for (String extension : deniedExtensions) {
+                if (extension != null && !extension.isEmpty() && lower.endsWith(extension)) {
+                    return false;
+                }
+            }
+        }
+
+        if (allowedExtensions != null) {
+            for (String extension : allowedExtensions) {
+                if (extension != null && !extension.isEmpty() && lower.endsWith(extension)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        return true;
+    }
+
+    // Formatiert das Ergebnis für eine gefundene Datei inkl. Zeitstempel.
+    private String formatFileResult(final Path filePath) {
+        final long elapsedNanos = System.nanoTime() - startTimeNano;
+        final long centis = elapsedNanos / 10_000_000L;
+        final long whole = centis / 100L;
+        final int cents = (int) (centis % 100L);
+
+        final String pathString = filePath.toAbsolutePath().toString();
+        return String.format("[%d.%02ds] %s", whole, cents, pathString);
+    }
+
+    // Prüft Inhalte der Datei gemäß den Content-Filtern
+    private boolean matchesContentFilters(final Path filePath) {
+        // Wenn keine Content-Filter gesetzt sind, akzeptieren
+        if ((contentIncludeFilters == null || contentIncludeFilters.isEmpty()) && (contentExcludeFilters == null || contentExcludeFilters.isEmpty())) {
+            return true;
+        }
+
+        try {
+            long size = Files.size(filePath);
+            if (size > 5 * 1024 * 1024) {
+                // Zu groß: skip content filters to avoid heavy IO
+                return true;
+            }
+            String content = new String(Files.readAllBytes(filePath));
+
+            // Prüfe Exclude-Filter zuerst: wenn ein Exclude-Filter passt, Datei ausschließen
+            if (contentExcludeFilters != null && !contentExcludeFilters.isEmpty()) {
+                if (matchesContentStringFilters(content, contentExcludeFilters, contentExcludeCaseMap, false)) {
+                    return false;
+                }
+            }
+
+            // Prüfe Include-Filter: wenn gesetzt, müssen mindestens einer (oder alle) passen
+            if (contentIncludeFilters != null && !contentIncludeFilters.isEmpty()) {
+                return matchesContentStringFilters(content, contentIncludeFilters, contentIncludeCaseMap, contentIncludeAllMode);
+            }
+
+            return true;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    // Helper für Content-String-Matching (Case-Sensitivity wird per caseMap gesteuert)
+    private boolean matchesContentStringFilters(final String source, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
+        if (filters == null || filters.isEmpty()) {
+            return false;
+        }
+
+        if (requireAll) {
+            for (String filter : filters) {
+                if (filter == null || filter.isEmpty()) continue;
+                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
+                boolean matched = caseSensitiveFilter ? source.contains(filter) : source.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
+                if (!matched) return false;
+            }
+            return true;
+        } else {
+            for (String filter : filters) {
+                if (filter == null || filter.isEmpty()) continue;
+                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
+                if (caseSensitiveFilter) {
+                    if (source.contains(filter)) return true;
+                } else {
+                    if (source.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT))) return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -374,69 +492,16 @@ public final class DirectoryTask extends RecursiveAction {
      * @return Dateiname ohne Endung
      */
     private String stripExtension(String fileName) {
-        if (fileName == null) {
-            return "";
-        }
-
+        if (fileName == null) return "";
         int index = fileName.lastIndexOf('.');
         if (index > 0) {
             return fileName.substring(0, index);
         }
-
         return fileName;
     }
 
     /**
-     * Prüft, ob der Dateiname eine erlaubte Endung hat und keine ausgeschlossene.
-     *
-     * @param fileName Dateiname
-     * @return true, wenn erlaubt, sonst false
-     */
-    private boolean matchesExtensions(final String fileName) {
-        final String lower = fileName.toLowerCase(Locale.ROOT);
-
-        if (deniedExtensions != null) {
-            for (String extension : deniedExtensions) {
-                if (extension != null && !extension.isEmpty() && lower.endsWith(extension)) {
-                    return false;
-                }
-            }
-        }
-
-        if (allowedExtensions != null) {
-            for (String extension : allowedExtensions) {
-                if (extension != null && !extension.isEmpty() && lower.endsWith(extension)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Formatiert das Ergebnis für eine gefundene Datei inkl. Zeitstempel.
-     *
-     * @param filePath Pfad zur Datei
-     * @return Formatierter String für das Ergebnis
-     */
-    private String formatFileResult(final Path filePath) {
-        final long elapsedNanos = System.nanoTime() - startTimeNano;
-        final long centis = elapsedNanos / 10_000_000L;
-        final long whole = centis / 100L;
-        final int cents = (int) (centis % 100L);
-
-        final String pathString = filePath.toAbsolutePath().toString();
-        return String.format("[%d.%02ds] %s", whole, cents, pathString);
-    }
-
-    /**
      * Prüft, ob der Quellstring das Ziel enthält, optional ohne Beachtung der Groß-/Kleinschreibung.
-     *
-     * @param source Quellstring
-     * @param target Zielstring
-     * @return true, wenn enthalten, sonst false
      */
     private boolean containsIgnoreCase(final String source, final String target) {
         if (target == null || target.isEmpty()) {
