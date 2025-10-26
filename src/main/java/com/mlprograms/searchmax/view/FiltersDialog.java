@@ -22,21 +22,32 @@ public class FiltersDialog extends JDialog {
     private final Map<String, Boolean> initialExtensionsDeny;
     private final Map<String, Boolean> initialIncludesCase;
     private final Map<String, Boolean> initialExcludesCase;
+    private final Map<String, Boolean> initialContentIncludes;
+    private final Map<String, Boolean> initialContentExcludes;
+    private final Map<String, Boolean> initialContentIncludesCase;
+    private final Map<String, Boolean> initialContentExcludesCase;
     private boolean confirmed = false;
     private boolean includeAllMode = false;
     // Modus für Inhalts-Filter: ob alle Filter passen müssen
     private boolean contentIncludeAllMode = false;
 
-    public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase, boolean initialIncludeAllMode) {
+    public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase, boolean initialIncludeAllMode, Map<String, Boolean> initialContentIncludes, Map<String, Boolean> initialContentExcludes, Map<String, Boolean> initialContentIncludesCase, Map<String, Boolean> initialContentExcludesCase, boolean initialContentIncludeAllMode) {
         super(owner, GuiConstants.FILTERS_DIALOG_TITLE, true);
         this.initialExtensionsAllow = initialExtensionsAllow == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsAllow);
         this.initialExtensionsDeny = initialExtensionsDeny == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsDeny);
         this.initialIncludesCase = initialIncludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialIncludesCase);
         this.initialExcludesCase = initialExcludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExcludesCase);
+        this.initialContentIncludes = initialContentIncludes == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentIncludes);
+        this.initialContentExcludes = initialContentExcludes == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentExcludes);
+        this.initialContentIncludesCase = initialContentIncludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentIncludesCase);
+        this.initialContentExcludesCase = initialContentExcludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentExcludesCase);
         this.includeAllMode = initialIncludeAllMode;
+        this.contentIncludeAllMode = initialContentIncludeAllMode;
 
         populateFilters(initialIncludes, initialExcludes);
+        populateContentFilters(this.initialContentIncludes, this.initialContentExcludes);
         applyCaseFlags();
+        applyContentCaseFlags();
         initUI();
         pack();
         setLocationRelativeTo(owner);
@@ -63,6 +74,43 @@ public class FiltersDialog extends JDialog {
                 if (t.isEmpty()) continue;
                 excludesTextModel.addEntry(t, enabled);
             }
+        }
+    }
+
+    // Populate content (file-content) filters into the content table models
+    private void populateContentFilters(Map<String, Boolean> inc, Map<String, Boolean> exc) {
+        if (inc != null) {
+            for (Map.Entry<String, Boolean> e : inc.entrySet()) {
+                String k = e.getKey();
+                boolean enabled = Boolean.TRUE.equals(e.getValue());
+                if (k == null) continue;
+                String t = k.trim();
+                if (t.isEmpty()) continue;
+                includesContentModel.addEntry(t, enabled);
+            }
+        }
+
+        if (exc != null) {
+            for (Map.Entry<String, Boolean> e : exc.entrySet()) {
+                String k = e.getKey();
+                boolean enabled = Boolean.TRUE.equals(e.getValue());
+                if (k == null) continue;
+                String t = k.trim();
+                if (t.isEmpty()) continue;
+                excludesContentModel.addEntry(t, enabled);
+            }
+        }
+    }
+
+    // Apply initial case-sensitivity flags to content filter entries
+    private void applyContentCaseFlags() {
+        for (TextFiltersTableModel.Entry en : includesContentModel.getEntries()) {
+            Boolean v = this.initialContentIncludesCase.get(en.pattern);
+            en.caseSensitive = Boolean.TRUE.equals(v);
+        }
+        for (TextFiltersTableModel.Entry en : excludesContentModel.getEntries()) {
+            Boolean v = this.initialContentExcludesCase.get(en.pattern);
+            en.caseSensitive = Boolean.TRUE.equals(v);
         }
     }
 

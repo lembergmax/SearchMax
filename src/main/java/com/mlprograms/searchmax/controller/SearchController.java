@@ -16,29 +16,27 @@ public class SearchController implements SearchEventListener {
     private final SearchModel model;
 
     private final ConcurrentLinkedQueue<String> pendingResults = new ConcurrentLinkedQueue<>();
-    private final ScheduledExecutorService flushScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "search-flusher");
-        t.setDaemon(true);
-        return t;
-    });
+    private final ScheduledExecutorService flushScheduler;
     private volatile int batchSize = 100;
 
     public SearchController(SearchService service, SearchModel model) {
         this.service = service;
         this.model = model;
-        flushScheduler.scheduleAtFixedRate(this::flushPending, 200, 200, TimeUnit.MILLISECONDS);
+        this.flushScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "search-flusher");
+            t.setDaemon(true);
+            return t;
+        });
+        this.flushScheduler.scheduleAtFixedRate(this::flushPending, 200, 200, TimeUnit.MILLISECONDS);
     }
 
-    public void startSearch(final String folder, final String query, final List<String> drives, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final Map<String, Boolean> includesCase, final List<String> excludes, final Map<String, Boolean> excludesCase, final boolean includeAllMode) {
+    public void startSearch(final String folder, final String query, final List<String> drives, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final Map<String, Boolean> includesCase, final List<String> excludes, final Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode) {
         pendingResults.clear();
         model.clearResults();
         model.setStatus("Suche läuft...");
 
-        if (includeAllMode) {
-            service.search(folder, query, drives, this, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode);
-        } else {
-            service.search(folder, query, drives, this, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
-        }
+        // Always call the service overload that accepts includeAllMode and content filters.
+        service.search(folder, query, drives, this, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
     }
 
     public boolean cancelSearch() {
