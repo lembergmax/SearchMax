@@ -23,8 +23,15 @@ public final class CenterPanel extends JPanel {
         resultList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         add(new JScrollPane(resultList), BorderLayout.CENTER);
 
-        // Doppelklick öffnet das selektierte Ergebnis
         resultList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                int index = resultList.locationToIndex(e.getPoint());
+                if (index >= 0) {
+                    resultList.setSelectedIndex(index);
+                }
+            }
+
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2 && !resultList.isSelectionEmpty()) {
@@ -33,7 +40,6 @@ public final class CenterPanel extends JPanel {
             }
         });
 
-        // Enter-Taste öffnet ebenfalls das selektierte Ergebnis
         resultList.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ENTER"), "open");
         resultList.getActionMap().put("open", new AbstractAction() {
             @Override

@@ -328,14 +328,6 @@ public final class SearchService {
         }
     }
 
-    private void safeSendError(final SearchEventListener listener, final String message) {
-        try {
-            listener.onError(message);
-        } catch (Exception e) {
-            log.info("Fehler beim Senden von Error", e);
-        }
-    }
-
     private void checkComplete(SearchHandle handle, SearchEventListener listener) {
         if (handle.getRemainingTasks().get() <= 0) {
             final int total = handle.getMatchCount().get();
