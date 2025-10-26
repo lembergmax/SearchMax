@@ -16,7 +16,7 @@ public final class StatusUpdater {
     /**
      * Text, der angezeigt wird, wenn die Suche läuft.
      */
-    private static final String SEARCH_RUNNING_TEXT = "Suche läuft";
+    private static final String SEARCH_RUNNING_TEXT = GuiConstants.SEARCH_RUNNING_TEXT;
     /**
      * Referenz auf die zu aktualisierende Suchansicht.
      */

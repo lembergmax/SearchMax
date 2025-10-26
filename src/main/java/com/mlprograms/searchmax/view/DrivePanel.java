@@ -15,7 +15,7 @@ public final class DrivePanel extends JPanel {
     public DrivePanel(final SearchView parent) {
         super(new FlowLayout(FlowLayout.LEFT));
         this.parent = parent;
-        setBorder(BorderFactory.createTitledBorder("Laufwerke durchsuchen"));
+        setBorder(BorderFactory.createTitledBorder(GuiConstants.DRIVE_PANEL_TITLE));
 
         final File[] roots = File.listRoots();
         driveCheckBoxes = new JCheckBox[roots.length];
