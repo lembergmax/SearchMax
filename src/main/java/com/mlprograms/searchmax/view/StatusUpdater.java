@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 
 import javax.swing.*;
 import java.beans.PropertyChangeEvent;
+import java.util.List;
 
 /**
  * Aktualisiert den Statusbereich der Benutzeroberfläche basierend auf Änderungen im Modell.
@@ -48,18 +49,24 @@ public final class StatusUpdater {
                     if (newSize < oldSize) {
                         model.clear();
                         for (Object object : newList) {
-                            if (object instanceof String string) model.addElement(string);
+                            if (object instanceof String string) {
+                                model.addElement(string);
+                            }
                         }
                     } else {
                         for (int i = oldSize; i < newSize; i++) {
                             Object obj = newList.get(i);
-                            if (obj instanceof String s) model.addElement(s);
+                            if (obj instanceof String s) {
+                                model.addElement(s);
+                            }
                         }
                     }
-                } else if (newValue instanceof java.util.List<?> list) {
+                } else if (newValue instanceof List<?> list) {
                     model.clear();
-                    for (Object object : list) {
-                        if (object instanceof String string) model.addElement(string);
+                    for (final Object object : list) {
+                        if (object instanceof String string) {
+                            model.addElement(string);
+                        }
                     }
                 }
             });
