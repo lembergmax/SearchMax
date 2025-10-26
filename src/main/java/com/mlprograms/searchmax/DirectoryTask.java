@@ -13,31 +13,125 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
+/**
+ * Durchsucht ein Verzeichnis rekursiv nach Dateien, die bestimmten Filterkriterien entsprechen.
+ * Unterstützt parallele Verarbeitung durch Fork/Join-Framework.
+ * <p>
+ * Filterkriterien umfassen:
+ * - Dateinamen-Query (mit/ohne Groß-/Kleinschreibung)
+ * - erlaubte/ausgeschlossene Dateiendungen
+ * - Include-/Exclude-Filter mit optionaler Case-Sensitivity
+ * <p>
+ * Ergebnisse werden in einer Collection gesammelt und optional an einen Consumer übergeben.
+ */
 @Slf4j
 @Getter
 @RequiredArgsConstructor
 public final class DirectoryTask extends RecursiveAction {
 
+    /**
+     * Namen von Systemverzeichnissen, die übersprungen werden sollen.
+     */
     private static final Set<String> SYSTEM_DIR_NAMES = new HashSet<>(Arrays.asList("system volume information", "$recycle.bin", "found.000", "recycler"));
 
+    /**
+     * Maximale Anzahl an Subtasks, bevor invokeAll aufgerufen wird.
+     */
     private static final int CHUNK_SIZE = 64;
 
+    /**
+     * Das zu durchsuchende Verzeichnis.
+     */
     private final Path directoryPath;
+
+    /**
+     * Sammlung für gefundene Ergebnisse.
+     */
     private final Collection<String> result;
+
+    /**
+     * Zähler für Treffer.
+     */
     private final AtomicInteger matchCount;
+
+    /**
+     * Suchbegriff für Dateinamen.
+     */
     private final String query;
+
+    /**
+     * Länge des Suchbegriffs.
+     */
     private final int queryLength;
+
+    /**
+     * Startzeitpunkt der Suche (nanoTime).
+     */
     private final long startTimeNano;
+
+    /**
+     * Optionaler Consumer für gefundene Ergebnisse.
+     */
     private final Consumer<String> emitter;
+
+    /**
+     * Abbruch-Flag.
+     */
     private final AtomicBoolean cancelled;
+
+    /**
+     * Groß-/Kleinschreibung bei Suche beachten.
+     */
     private final boolean caseSensitive;
+
+    /**
+     * Liste erlaubter Dateiendungen.
+     */
     private final List<String> allowedExtensions;
+
+    /**
+     * Liste ausgeschlossener Dateiendungen.
+     */
     private final List<String> deniedExtensions;
+
+    /**
+     * Liste von Include-Filtern.
+     */
     private final List<String> includeFilters;
+
+    /**
+     * Case-Sensitivity-Map für Include-Filter.
+     */
     private final Map<String, Boolean> includeCaseMap;
+
+    /**
+     * Liste von Exclude-Filtern.
+     */
     private final List<String> excludeFilters;
+
+    /**
+     * Case-Sensitivity-Map für Exclude-Filter.
+     */
     private final Map<String, Boolean> excludeCaseMap;
 
+    /**
+     * Erstellt eine neue DirectoryTask mit den angegebenen Parametern.
+     *
+     * @param directoryPath     Das zu durchsuchende Verzeichnis
+     * @param result            Sammlung für gefundene Ergebnisse
+     * @param matchCount        Zähler für Treffer
+     * @param query             Suchbegriff für Dateinamen
+     * @param startTimeNano     Startzeitpunkt der Suche (nanoTime)
+     * @param emitter           Optionaler Consumer für gefundene Ergebnisse
+     * @param cancelled         Abbruch-Flag
+     * @param caseSensitive     Groß-/Kleinschreibung bei Suche beachten
+     * @param allowedExtensions Liste erlaubter Dateiendungen
+     * @param deniedExtensions  Liste ausgeschlossener Dateiendungen
+     * @param includeFilters    Liste von Include-Filtern
+     * @param includeCaseMap    Case-Sensitivity-Map für Include-Filter
+     * @param excludeFilters    Liste von Exclude-Filtern
+     * @param excludeCaseMap    Case-Sensitivity-Map für Exclude-Filter
+     */
     public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap) {
         this.directoryPath = directoryPath;
         this.result = (result == null) ? new ConcurrentLinkedQueue<>() : result;
@@ -57,6 +151,10 @@ public final class DirectoryTask extends RecursiveAction {
         this.excludeCaseMap = (excludeCaseMap == null || excludeCaseMap.isEmpty()) ? null : new HashMap<>(excludeCaseMap);
     }
 
+    /**
+     * Startet die rekursive Verarbeitung des Verzeichnisses.
+     * Erstellt Subtasks für Unterverzeichnisse und verarbeitet Dateien.
+     */
     @Override
     protected void compute() {
         if (isCancelledOrInvalid()) {
@@ -100,14 +198,31 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
+    /**
+     * Prüft, ob die Aufgabe abgebrochen wurde oder das Verzeichnis ungültig ist.
+     *
+     * @return true, wenn abgebrochen oder ungültig, sonst false
+     */
     private boolean isCancelledOrInvalid() {
         return Thread.currentThread().isInterrupted() || (cancelled != null && cancelled.get()) || directoryPath == null || !Files.isDirectory(directoryPath);
     }
 
+    /**
+     * Erstellt einen neuen Subtask für ein Unterverzeichnis.
+     *
+     * @param subDir Das Unterverzeichnis
+     * @return Neuer DirectoryTask für das Unterverzeichnis
+     */
     private DirectoryTask createSubtask(Path subDir) {
         return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap);
     }
 
+    /**
+     * Prüft, ob ein Verzeichnis als Systemverzeichnis gilt und übersprungen werden soll.
+     *
+     * @param path Zu prüfender Pfad
+     * @return true, wenn Systemverzeichnis, sonst false
+     */
     private boolean isSystemDirectory(final Path path) {
         final Path namePath = path.getFileName();
         if (namePath == null) {
@@ -118,6 +233,11 @@ public final class DirectoryTask extends RecursiveAction {
         return SYSTEM_DIR_NAMES.contains(name) || name.startsWith("windows");
     }
 
+    /**
+     * Prüft und verarbeitet eine Datei, falls sie den Filterkriterien entspricht.
+     *
+     * @param filePath Pfad zur Datei
+     */
     private void processFile(final Path filePath) {
         if (isCancelledOrInvalid()) {
             return;
@@ -157,10 +277,22 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
+    /**
+     * Prüft, ob der Dateiname die Query enthält.
+     *
+     * @param fileName Dateiname
+     * @return true, wenn Query enthalten ist oder leer, sonst false
+     */
     private boolean matchesQuery(final String fileName) {
         return queryLength == 0 || containsIgnoreCase(fileName, query);
     }
 
+    /**
+     * Prüft, ob der Dateiname einen der Include-Filter erfüllt.
+     *
+     * @param fileName Dateiname
+     * @return true, wenn kein Filter gesetzt oder mindestens ein Filter passt
+     */
     private boolean matchesIncludeFilters(final String fileName) {
         if (includeFilters == null || includeFilters.isEmpty()) {
             return true;
@@ -168,6 +300,12 @@ public final class DirectoryTask extends RecursiveAction {
         return matchesFilters(fileName, includeFilters, includeCaseMap);
     }
 
+    /**
+     * Prüft, ob der Dateiname einen der Exclude-Filter erfüllt.
+     *
+     * @param fileName Dateiname
+     * @return true, wenn mindestens ein Exclude-Filter passt, sonst false
+     */
     private boolean matchesExcludeFilters(final String fileName) {
         if (excludeFilters == null || excludeFilters.isEmpty()) {
             return false;
@@ -175,6 +313,14 @@ public final class DirectoryTask extends RecursiveAction {
         return matchesFilters(fileName, excludeFilters, excludeCaseMap);
     }
 
+    /**
+     * Prüft, ob der Dateiname mit einem der Filter übereinstimmt.
+     *
+     * @param fileName Dateiname
+     * @param filters  Liste der Filter
+     * @param caseMap  Map für Case-Sensitivity je Filter
+     * @return true, wenn mindestens ein Filter passt, sonst false
+     */
     private static boolean matchesFilters(final String fileName, final List<String> filters, final Map<String, Boolean> caseMap) {
         for (String filter : filters) {
             if (filter == null || filter.isEmpty()) {
@@ -190,6 +336,12 @@ public final class DirectoryTask extends RecursiveAction {
         return false;
     }
 
+    /**
+     * Prüft, ob der Dateiname eine erlaubte Endung hat und keine ausgeschlossene.
+     *
+     * @param fileName Dateiname
+     * @return true, wenn erlaubt, sonst false
+     */
     private boolean matchesExtensions(final String fileName) {
         final String lower = fileName.toLowerCase(Locale.ROOT);
 
@@ -213,6 +365,12 @@ public final class DirectoryTask extends RecursiveAction {
         return true;
     }
 
+    /**
+     * Formatiert das Ergebnis für eine gefundene Datei inkl. Zeitstempel.
+     *
+     * @param filePath Pfad zur Datei
+     * @return Formatierter String für das Ergebnis
+     */
     private String formatFileResult(final Path filePath) {
         final long elapsedNanos = System.nanoTime() - startTimeNano;
         final long centis = elapsedNanos / 10_000_000L;
@@ -223,6 +381,13 @@ public final class DirectoryTask extends RecursiveAction {
         return String.format("[%d.%02d s] %s", whole, cents, pathString);
     }
 
+    /**
+     * Prüft, ob der Quellstring das Ziel enthält, optional ohne Beachtung der Groß-/Kleinschreibung.
+     *
+     * @param source Quellstring
+     * @param target Zielstring
+     * @return true, wenn enthalten, sonst false
+     */
     private boolean containsIgnoreCase(final String source, final String target) {
         if (target == null || target.isEmpty()) {
             return true;
