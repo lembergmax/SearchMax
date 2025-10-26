@@ -247,6 +247,8 @@ public final class SearchView extends JFrame {
         topPanel.getSearchButton().setEnabled(!running);
         topPanel.getCancelButton().setEnabled(running);
         topPanel.getQueryField().setEnabled(!running);
+        topPanel.getCaseSensitiveCheck().setEnabled(!running);
+        topPanel.getManageFiltersButton().setEnabled(!running);
         updateFolderFieldState();
     }
 
