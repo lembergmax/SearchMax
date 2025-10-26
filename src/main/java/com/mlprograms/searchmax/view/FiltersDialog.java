@@ -14,12 +14,18 @@ public class FiltersDialog extends JDialog {
 
     private final TextFiltersTableModel includesTextModel = new TextFiltersTableModel();
     private final TextFiltersTableModel excludesTextModel = new TextFiltersTableModel();
+    // Neue Modelle für Datei-Inhalt
+    private final TextFiltersTableModel includesContentModel = new TextFiltersTableModel();
+    private final TextFiltersTableModel excludesContentModel = new TextFiltersTableModel();
+
     private final Map<String, Boolean> initialExtensionsAllow;
     private final Map<String, Boolean> initialExtensionsDeny;
     private final Map<String, Boolean> initialIncludesCase;
     private final Map<String, Boolean> initialExcludesCase;
     private boolean confirmed = false;
     private boolean includeAllMode = false;
+    // Modus für Inhalts-Filter: ob alle Filter passen müssen
+    private boolean contentIncludeAllMode = false;
 
     public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase, boolean initialIncludeAllMode) {
         super(owner, GuiConstants.FILTERS_DIALOG_TITLE, true);
@@ -69,12 +75,15 @@ public class FiltersDialog extends JDialog {
             Boolean v = this.initialExcludesCase.get(en.pattern);
             en.caseSensitive = Boolean.TRUE.equals(v);
         }
+        // Content models haben derzeit keine initialen Case-Flags (können später ergänzt werden)
     }
 
     private void initUI() {
         setLayout(new BorderLayout(8, 8));
-        JPanel center = new JPanel(new GridLayout(1, 2, 8, 8));
+        // GridLayout auf 1x3 erweitert, drittes Panel für Datei-Inhalt in der Mitte
+        JPanel center = new JPanel(new GridLayout(1, 3, 8, 8));
         center.add(createTextFiltersPanel());
+        center.add(createContentFiltersPanel());
         center.add(createExtensionsPanel());
         add(center, BorderLayout.CENTER);
         add(createBottomPanel(), BorderLayout.SOUTH);
@@ -143,6 +152,75 @@ public class FiltersDialog extends JDialog {
             int idx = tabs.getSelectedIndex();
             if (idx == 0) includesTextModel.setAllEnabled(false);
             else excludesTextModel.setAllEnabled(false);
+        });
+
+        return panel;
+    }
+
+    // Neues Panel für Datei-Inhalt
+    private Component createContentFiltersPanel() {
+        JPanel panel = new JPanel(new BorderLayout(4, 4));
+        panel.setBorder(BorderFactory.createTitledBorder(GuiConstants.CONTENT_PANEL_TITLE));
+
+        JTable includeTable = new JTable(includesContentModel);
+        configureTextTable(includeTable, includesContentModel);
+        JTable excludeTable = new JTable(excludesContentModel);
+        configureTextTable(excludeTable, excludesContentModel);
+
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.add(GuiConstants.TAB_ALLOW, new JScrollPane(includeTable));
+        tabs.add(GuiConstants.TAB_DENY, new JScrollPane(excludeTable));
+
+        panel.add(tabs, BorderLayout.CENTER);
+
+        // Top options: Any / All für Inhalts-Filter
+        JPanel topOptions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JRadioButton anyBtn = new JRadioButton(GuiConstants.RADIO_ANY);
+        JRadioButton allBtn = new JRadioButton(GuiConstants.RADIO_ALL);
+        ButtonGroup group = new ButtonGroup();
+        group.add(anyBtn);
+        group.add(allBtn);
+        anyBtn.setSelected(!contentIncludeAllMode);
+        allBtn.setSelected(contentIncludeAllMode);
+        anyBtn.addActionListener(e -> contentIncludeAllMode = false);
+        allBtn.addActionListener(e -> contentIncludeAllMode = true);
+        topOptions.add(anyBtn);
+        topOptions.add(allBtn);
+        panel.add(topOptions, BorderLayout.NORTH);
+
+        JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
+        Dimension small = new Dimension(120, 24);
+        JButton add = new JButton(GuiConstants.BUTTON_ADD);
+        add.setPreferredSize(small);
+        JButton enableAll = new JButton(GuiConstants.BUTTON_ENABLE_ALL);
+        enableAll.setPreferredSize(small);
+        JButton disableAll = new JButton(GuiConstants.BUTTON_DISABLE_ALL);
+        disableAll.setPreferredSize(small);
+        btnBar.add(add);
+        btnBar.add(enableAll);
+        btnBar.add(disableAll);
+        panel.add(btnBar, BorderLayout.SOUTH);
+
+        add.addActionListener(e -> {
+            String raw = JOptionPane.showInputDialog(this, GuiConstants.INPUT_ADD_CONTENT_PATTERN, GuiConstants.INPUT_ADD_TITLE, JOptionPane.PLAIN_MESSAGE);
+            if (raw != null) {
+                String t = raw.trim();
+                if (t.isEmpty()) return;
+                int idx = tabs.getSelectedIndex();
+                if (idx == 0) includesContentModel.addEntry(t, true);
+                else excludesContentModel.addEntry(t, true);
+            }
+        });
+
+        enableAll.addActionListener(e -> {
+            int idx = tabs.getSelectedIndex();
+            if (idx == 0) includesContentModel.setAllEnabled(true);
+            else excludesContentModel.setAllEnabled(true);
+        });
+        disableAll.addActionListener(e -> {
+            int idx = tabs.getSelectedIndex();
+            if (idx == 0) includesContentModel.setAllEnabled(false);
+            else excludesContentModel.setAllEnabled(false);
         });
 
         return panel;
@@ -338,6 +416,31 @@ public class FiltersDialog extends JDialog {
         return out;
     }
 
+    // Getter für Inhaltsfilter
+    public java.util.Map<String, Boolean> getContentIncludesMap() {
+        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+        for (TextFiltersTableModel.Entry en : includesContentModel.getEntries()) out.put(en.pattern, en.enabled);
+        return out;
+    }
+
+    public java.util.Map<String, Boolean> getContentIncludesCaseMap() {
+        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+        for (TextFiltersTableModel.Entry en : includesContentModel.getEntries()) out.put(en.pattern, en.caseSensitive);
+        return out;
+    }
+
+    public java.util.Map<String, Boolean> getContentExcludesMap() {
+        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+        for (TextFiltersTableModel.Entry en : excludesContentModel.getEntries()) out.put(en.pattern, en.enabled);
+        return out;
+    }
+
+    public java.util.Map<String, Boolean> getContentExcludesCaseMap() {
+        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+        for (TextFiltersTableModel.Entry en : excludesContentModel.getEntries()) out.put(en.pattern, en.caseSensitive);
+        return out;
+    }
+
     private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsAllowGetter = () -> new LinkedHashMap<>();
     private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsDenyGetter = () -> new LinkedHashMap<>();
 
@@ -351,5 +454,10 @@ public class FiltersDialog extends JDialog {
 
     public boolean isIncludeAllMode() {
         return includeAllMode;
+    }
+
+    // Getter für Inhaltsmodus
+    public boolean isContentIncludeAllMode() {
+        return contentIncludeAllMode;
     }
 }
