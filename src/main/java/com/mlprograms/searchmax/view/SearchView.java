@@ -101,6 +101,13 @@ public final class SearchView extends JFrame {
         updateButtons(false);
         updateFolderFieldState();
 
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                saveExtensionsToSettings();
+            }
+        });
+
         pack();
         setMinimumSize(new Dimension(700, 400));
         setSize(800, 600);
@@ -270,6 +277,13 @@ public final class SearchView extends JFrame {
             properties.put("extensionsAllow", String.join(",", knownExtensionsAllow.keySet()));
             properties.put("extensionsDeny", String.join(",", knownExtensionsDeny.keySet()));
 
+            // additional top-panel settings
+            properties.put("startFolder", topPanel.getFolderField().getText() == null ? "" : topPanel.getFolderField().getText());
+            properties.put("query", topPanel.getQueryField().getText() == null ? "" : topPanel.getQueryField().getText());
+            properties.put("caseSensitive", Boolean.toString(topPanel.getCaseSensitiveCheck().isSelected()));
+            // drives
+            properties.put("drives", String.join(",", drivePanel.getSelectedDrives()));
+
             java.io.File file = settingsFile.toFile();
             try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
                 properties.store(fos, "SearchMax Filter Settings");
@@ -296,6 +310,26 @@ public final class SearchView extends JFrame {
             final Properties properties = new Properties();
             try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
                 properties.load(fis);
+            }
+
+            String startFolder = properties.getProperty("startFolder", "").trim();
+            if (!startFolder.isEmpty()) topPanel.getFolderField().setText(startFolder);
+
+            String q = properties.getProperty("query", "").trim();
+            if (!q.isEmpty()) topPanel.getQueryField().setText(q);
+
+            String caseStr = properties.getProperty("caseSensitive", "false").trim();
+            topPanel.getCaseSensitiveCheck().setSelected("true".equalsIgnoreCase(caseStr));
+
+            String drives = properties.getProperty("drives", "").trim();
+            if (!drives.isEmpty()) {
+                String[] parts = drives.split(",");
+                java.util.List<String> dl = new java.util.ArrayList<>();
+                for (String p : parts) {
+                    String t = p.trim();
+                    if (!t.isEmpty()) dl.add(t);
+                }
+                drivePanel.setSelectedDrives(dl);
             }
 
             String inc = properties.getProperty("includes", "").trim();
