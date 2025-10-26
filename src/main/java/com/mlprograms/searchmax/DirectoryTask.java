@@ -115,6 +115,11 @@ public final class DirectoryTask extends RecursiveAction {
     private final Map<String, Boolean> excludeCaseMap;
 
     /**
+     * Ob alle Include-Filter erfüllt sein müssen (true) oder ob nur einer passen darf (false).
+     */
+    private final boolean includeAllMode;
+
+    /**
      * Erstellt eine neue DirectoryTask mit den angegebenen Parametern.
      *
      * @param directoryPath     Das zu durchsuchende Verzeichnis
@@ -131,8 +136,9 @@ public final class DirectoryTask extends RecursiveAction {
      * @param includeCaseMap    Case-Sensitivity-Map für Include-Filter
      * @param excludeFilters    Liste von Exclude-Filtern
      * @param excludeCaseMap    Case-Sensitivity-Map für Exclude-Filter
+     * @param includeAllMode    Ob alle Include-Filter erfüllt sein müssen
      */
-    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap) {
+    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode) {
         this.directoryPath = directoryPath;
         this.result = (result == null) ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -149,6 +155,7 @@ public final class DirectoryTask extends RecursiveAction {
         this.includeCaseMap = (includeCaseMap == null || includeCaseMap.isEmpty()) ? null : new HashMap<>(includeCaseMap);
         this.excludeFilters = (excludeFilters == null || excludeFilters.isEmpty()) ? null : new ArrayList<>(excludeFilters);
         this.excludeCaseMap = (excludeCaseMap == null || excludeCaseMap.isEmpty()) ? null : new HashMap<>(excludeCaseMap);
+        this.includeAllMode = includeAllMode;
     }
 
     /**
@@ -214,7 +221,7 @@ public final class DirectoryTask extends RecursiveAction {
      * @return Neuer DirectoryTask für das Unterverzeichnis
      */
     private DirectoryTask createSubtask(Path subDir) {
-        return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap);
+        return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode);
     }
 
     /**
@@ -297,7 +304,8 @@ public final class DirectoryTask extends RecursiveAction {
         if (includeFilters == null || includeFilters.isEmpty()) {
             return true;
         }
-        return matchesFilters(fileName, includeFilters, includeCaseMap);
+        String base = stripExtension(fileName);
+        return matchesFilters(base, includeFilters, includeCaseMap, includeAllMode);
     }
 
     /**
@@ -310,30 +318,72 @@ public final class DirectoryTask extends RecursiveAction {
         if (excludeFilters == null || excludeFilters.isEmpty()) {
             return false;
         }
-        return matchesFilters(fileName, excludeFilters, excludeCaseMap);
+        String base = stripExtension(fileName);
+        return matchesFilters(base, excludeFilters, excludeCaseMap, false);
     }
 
     /**
      * Prüft, ob der Dateiname mit einem der Filter übereinstimmt.
      *
-     * @param fileName Dateiname
-     * @param filters  Liste der Filter
-     * @param caseMap  Map für Case-Sensitivity je Filter
+     * @param nameToCheck Zu prüfender Name (ohne Pfad)
+     * @param filters     Liste der Filter
+     * @param caseMap     Map für Case-Sensitivity je Filter
+     * @param requireAll  Ob alle Filter erfüllt sein müssen
      * @return true, wenn mindestens ein Filter passt, sonst false
      */
-    private static boolean matchesFilters(final String fileName, final List<String> filters, final Map<String, Boolean> caseMap) {
-        for (String filter : filters) {
-            if (filter == null || filter.isEmpty()) {
-                continue;
-            }
-
-            boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
-            if ((caseSensitiveFilter && fileName.contains(filter)) || (!caseSensitiveFilter && fileName.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT)))) {
-                return true;
-            }
+    private boolean matchesFilters(final String nameToCheck, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
+        if (filters == null || filters.isEmpty()) {
+            return false;
         }
 
-        return false;
+        if (requireAll) {
+            for (String filter : filters) {
+                if (filter == null || filter.isEmpty()) {
+                    continue;
+                }
+
+                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
+                boolean matched = caseSensitiveFilter ? nameToCheck.contains(filter) : nameToCheck.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
+                if (!matched) {
+                    return false;
+                }
+            }
+
+            return true;
+        } else {
+            for (String filter : filters) {
+                if (filter == null || filter.isEmpty()) {
+                    continue;
+                }
+
+                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
+                if (caseSensitiveFilter) {
+                    if (nameToCheck.contains(filter)) return true;
+                } else {
+                    if (nameToCheck.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT))) return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Entfernt die Dateiendung aus dem Dateinamen, falls vorhanden.
+     *
+     * @param fileName Dateiname
+     * @return Dateiname ohne Endung
+     */
+    private String stripExtension(String fileName) {
+        if (fileName == null) {
+            return "";
+        }
+
+        int index = fileName.lastIndexOf('.');
+        if (index > 0) {
+            return fileName.substring(0, index);
+        }
+
+        return fileName;
     }
 
     /**

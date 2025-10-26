@@ -88,6 +88,11 @@ public final class SearchView extends JFrame {
     private final Map<String, Boolean> knownExtensionsDeny = new LinkedHashMap<>();
 
     /**
+     * Gibt an, ob der Modus "Enthält alle" aktiv ist.
+     */
+    private boolean knownIncludesAllMode = false;
+
+    /**
      * Konstruktor für die SearchView.
      * Initialisiert die UI-Komponenten, lädt Einstellungen und bindet das Model.
      *
@@ -232,7 +237,7 @@ public final class SearchView extends JFrame {
                 JOptionPane.showMessageDialog(this, "Bitte einen Suchtext oder Dateityp angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            controller.startSearch("", query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
+            controller.startSearch("", query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode);
             return;
         }
 
@@ -245,7 +250,7 @@ public final class SearchView extends JFrame {
             return;
         }
 
-        controller.startSearch(folder.trim(), query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase);
+        controller.startSearch(folder.trim(), query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode);
     }
 
     /**
@@ -281,7 +286,7 @@ public final class SearchView extends JFrame {
      * Öffnet den Filter-Dialog und übernimmt ggf. die neuen Filtereinstellungen.
      */
     void onManageFilters() {
-        final FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase);
+        final FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase, knownIncludesAllMode);
         filtersDialog.setVisible(true);
 
         if (filtersDialog.isConfirmed()) {
@@ -305,6 +310,8 @@ public final class SearchView extends JFrame {
             knownExtensionsAllow.putAll(extensionsAllow);
             knownExtensionsDeny.clear();
             knownExtensionsDeny.putAll(extensionsDeny);
+
+            knownIncludesAllMode = filtersDialog.isIncludeAllMode();
 
             saveExtensionsToSettings();
         }
@@ -368,6 +375,7 @@ public final class SearchView extends JFrame {
             properties.put("query", topPanel.getQueryField().getText() == null ? "" : topPanel.getQueryField().getText());
             properties.put("caseSensitive", Boolean.toString(topPanel.getCaseSensitiveCheck().isSelected()));
             properties.put("drives", String.join(",", drivePanel.getSelectedDrives()));
+            properties.put("includesMode", knownIncludesAllMode ? "ALL" : "ANY");
 
             final File file = settingsFile.toFile();
             try (final FileOutputStream fileOutputStream = new FileOutputStream(file)) {
@@ -460,6 +468,9 @@ public final class SearchView extends JFrame {
             parseFilterString(allow, knownExtensionsAllow);
             final String deny = properties.getProperty("extensionsDeny", "").trim();
             parseFilterString(deny, knownExtensionsDeny);
+
+            String mode = properties.getProperty("includesMode", "ANY").trim();
+            knownIncludesAllMode = "ALL".equalsIgnoreCase(mode);
         } catch (final Exception exception) {
             log.warn("Fehler beim Laden der Filtereinstellungen", exception);
         }

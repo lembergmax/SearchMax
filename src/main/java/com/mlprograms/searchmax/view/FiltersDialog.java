@@ -19,13 +19,15 @@ public class FiltersDialog extends JDialog {
     private final Map<String, Boolean> initialIncludesCase;
     private final Map<String, Boolean> initialExcludesCase;
     private boolean confirmed = false;
+    private boolean includeAllMode = false;
 
-    public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase) {
+    public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase, boolean initialIncludeAllMode) {
         super(owner, "Dateiname-Filter verwalten", true);
         this.initialExtensionsAllow = initialExtensionsAllow == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsAllow);
         this.initialExtensionsDeny = initialExtensionsDeny == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsDeny);
         this.initialIncludesCase = initialIncludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialIncludesCase);
         this.initialExcludesCase = initialExcludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExcludesCase);
+        this.includeAllMode = initialIncludeAllMode;
 
         populateFilters(initialIncludes, initialExcludes);
         applyCaseFlags();
@@ -94,12 +96,31 @@ public class FiltersDialog extends JDialog {
 
         panel.add(tabs, BorderLayout.CENTER);
 
+        JPanel topOptions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JRadioButton anyBtn = new JRadioButton("Mindestens ein Filter muss passen (ODER)");
+        JRadioButton allBtn = new JRadioButton("Alle Filter müssen passen (UND)");
+        ButtonGroup group = new ButtonGroup();
+        group.add(anyBtn);
+        group.add(allBtn);
+        anyBtn.setSelected(!includeAllMode);
+        allBtn.setSelected(includeAllMode);
+        anyBtn.addActionListener(e -> includeAllMode = false);
+        allBtn.addActionListener(e -> includeAllMode = true);
+        topOptions.add(anyBtn);
+        topOptions.add(allBtn);
+        panel.add(topOptions, BorderLayout.NORTH);
+
         JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
         Dimension small = new Dimension(120, 24);
-        JButton add = new JButton("Hinzufügen"); add.setPreferredSize(small);
-        JButton enableAll = new JButton("Alle aktivieren"); enableAll.setPreferredSize(small);
-        JButton disableAll = new JButton("Alle deaktivieren"); disableAll.setPreferredSize(small);
-        btnBar.add(add); btnBar.add(enableAll); btnBar.add(disableAll);
+        JButton add = new JButton("Hinzufügen");
+        add.setPreferredSize(small);
+        JButton enableAll = new JButton("Alle aktivieren");
+        enableAll.setPreferredSize(small);
+        JButton disableAll = new JButton("Alle deaktivieren");
+        disableAll.setPreferredSize(small);
+        btnBar.add(add);
+        btnBar.add(enableAll);
+        btnBar.add(disableAll);
         panel.add(btnBar, BorderLayout.SOUTH);
 
         add.addActionListener(e -> {
@@ -108,17 +129,20 @@ public class FiltersDialog extends JDialog {
                 String t = raw.trim();
                 if (t.isEmpty()) return;
                 int idx = tabs.getSelectedIndex();
-                if (idx == 0) includesTextModel.addEntry(t, true); else excludesTextModel.addEntry(t, true);
+                if (idx == 0) includesTextModel.addEntry(t, true);
+                else excludesTextModel.addEntry(t, true);
             }
         });
 
         enableAll.addActionListener(e -> {
             int idx = tabs.getSelectedIndex();
-            if (idx == 0) includesTextModel.setAllEnabled(true); else excludesTextModel.setAllEnabled(true);
+            if (idx == 0) includesTextModel.setAllEnabled(true);
+            else excludesTextModel.setAllEnabled(true);
         });
         disableAll.addActionListener(e -> {
             int idx = tabs.getSelectedIndex();
-            if (idx == 0) includesTextModel.setAllEnabled(false); else excludesTextModel.setAllEnabled(false);
+            if (idx == 0) includesTextModel.setAllEnabled(false);
+            else excludesTextModel.setAllEnabled(false);
         });
 
         return panel;
@@ -189,11 +213,13 @@ public class FiltersDialog extends JDialog {
 
         extEnableAll.addActionListener(e -> {
             int idx = tabs.getSelectedIndex();
-            if (idx == 0) allowModel.setAllEnabled(true); else denyModel.setAllEnabled(true);
+            if (idx == 0) allowModel.setAllEnabled(true);
+            else denyModel.setAllEnabled(true);
         });
         extDisableAll.addActionListener(e -> {
             int idx = tabs.getSelectedIndex();
-            if (idx == 0) allowModel.setAllEnabled(false); else denyModel.setAllEnabled(false);
+            if (idx == 0) allowModel.setAllEnabled(false);
+            else denyModel.setAllEnabled(false);
         });
 
         this.extensionsAllowGetter = () -> {
@@ -236,7 +262,11 @@ public class FiltersDialog extends JDialog {
                 int allowIndex = -1;
                 for (int i = 0; i < allowModel.getEntries().size(); i++) {
                     ExtensionsTableModelBase.Entry e = allowModel.getEntries().get(i);
-                    if (e.ext.equals(t)) { foundInAllow = true; allowIndex = i; break; }
+                    if (e.ext.equals(t)) {
+                        foundInAllow = true;
+                        allowIndex = i;
+                        break;
+                    }
                 }
                 if (foundInAllow) {
                     allowModel.getEntries().remove(allowIndex);
@@ -280,7 +310,9 @@ public class FiltersDialog extends JDialog {
         }, KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
     }
 
-    public boolean isConfirmed() { return confirmed; }
+    public boolean isConfirmed() {
+        return confirmed;
+    }
 
     public java.util.Map<String, Boolean> getIncludesMap() {
         java.util.Map<String, Boolean> out = new LinkedHashMap<>();
@@ -306,9 +338,18 @@ public class FiltersDialog extends JDialog {
         return out;
     }
 
-    private java.util.function.Supplier<java.util.Map<String,Boolean>> extensionsAllowGetter = () -> new LinkedHashMap<>();
-    private java.util.function.Supplier<java.util.Map<String,Boolean>> extensionsDenyGetter = () -> new LinkedHashMap<>();
+    private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsAllowGetter = () -> new LinkedHashMap<>();
+    private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsDenyGetter = () -> new LinkedHashMap<>();
 
-    public java.util.Map<String, Boolean> getExtensionsAllowMap() { return extensionsAllowGetter.get(); }
-    public java.util.Map<String, Boolean> getExtensionsDenyMap() { return extensionsDenyGetter.get(); }
+    public java.util.Map<String, Boolean> getExtensionsAllowMap() {
+        return extensionsAllowGetter.get();
+    }
+
+    public java.util.Map<String, Boolean> getExtensionsDenyMap() {
+        return extensionsDenyGetter.get();
+    }
+
+    public boolean isIncludeAllMode() {
+        return includeAllMode;
+    }
 }
