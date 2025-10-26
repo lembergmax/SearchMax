@@ -1,4 +1,4 @@
-package com.mlprograms.searchmax.view;
+package com.mlprograms.searchmax.model;
 
 import javax.swing.JOptionPane;
 import javax.swing.table.AbstractTableModel;
