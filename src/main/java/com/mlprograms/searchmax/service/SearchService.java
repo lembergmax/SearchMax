@@ -17,11 +17,30 @@ import java.util.function.Consumer;
 @Slf4j
 public final class SearchService {
 
-    private final ForkJoinPool pool;
+    private volatile ForkJoinPool pool;
     private final ConcurrentMap<String, SearchHandle> searches = new ConcurrentHashMap<>();
 
     public SearchService() {
-        this.pool = new ForkJoinPool(Math.max(1, Runtime.getRuntime().availableProcessors()));
+        // Default: use single core for searches
+        this.pool = new ForkJoinPool(1);
+    }
+
+    public synchronized void setUseAllCores(boolean useAll) {
+        int desired = useAll ? Math.max(1, Runtime.getRuntime().availableProcessors()) : 1;
+        if (pool != null && pool.getParallelism() == desired) return;
+        // replace pool for subsequent searches
+        ForkJoinPool newPool = new ForkJoinPool(desired);
+        ForkJoinPool old = this.pool;
+        this.pool = newPool;
+        try {
+            if (old != null) old.shutdown();
+        } catch (Exception e) {
+            log.debug("Fehler beim Herunterfahren des alten Pools", e);
+        }
+    }
+
+    public boolean isUsingAllCores() {
+        return pool != null && pool.getParallelism() > 1;
     }
 
     public void search(final String folderPath, final String queryText, final List<String> drives, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase) {
@@ -218,7 +237,7 @@ public final class SearchService {
     }
 
     private SearchHandle createSearchHandle(long startNano, int remainingTasks) {
-        return new SearchHandle(null, startNano, new AtomicInteger(remainingTasks), new AtomicInteger(0), new ConcurrentLinkedQueue<>());
+        return new SearchHandle(null, startNano, new AtomicInteger(remainingTasks), new AtomicInteger(0), new ConcurrentLinkedQueue<>(), remainingTasks);
     }
 
     private void startSearchTask(final String id, final Path startPath, final String queryText, final SearchHandle handle, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode) {

@@ -91,6 +91,7 @@ public final class SearchView extends JFrame {
      * Gibt an, ob der Modus "Enthält alle" aktiv ist.
      */
     private boolean knownIncludesAllMode = false;
+    private boolean useAllCores = false;
 
     /**
      * Konstruktor für die SearchView.
@@ -113,6 +114,13 @@ public final class SearchView extends JFrame {
         initUI();
         bindModel();
         loadSettings();
+
+        bottomPanel.getPerformanceModeCheck().addActionListener(e -> {
+            boolean sel = bottomPanel.getPerformanceModeCheck().isSelected();
+            useAllCores = sel;
+            controller.setUseAllCores(useAllCores);
+            saveExtensionsToSettings();
+        });
 
         // TODO: irgendwie anders lösen
         SwingUtilities.invokeLater(() -> {
@@ -334,11 +342,6 @@ public final class SearchView extends JFrame {
         drivePanel.setDrivesEnabled(true);
     }
 
-    /**
-     * Aktiviert oder deaktiviert die Buttons und Eingabefelder je nach Suchstatus.
-     *
-     * @param running Gibt an, ob eine Suche läuft
-     */
     void updateButtons(final boolean running) {
         this.running = running;
         topPanel.getSearchButton().setEnabled(!running);
@@ -346,6 +349,7 @@ public final class SearchView extends JFrame {
         topPanel.getQueryField().setEnabled(!running);
         topPanel.getCaseSensitiveCheck().setEnabled(!running);
         topPanel.getManageFiltersButton().setEnabled(!running);
+        bottomPanel.getPerformanceModeCheck().setEnabled(!running);
         drivePanel.setDrivesEnabled(!running);
         updateFolderFieldState();
     }
@@ -376,6 +380,7 @@ public final class SearchView extends JFrame {
             properties.put("caseSensitive", Boolean.toString(topPanel.getCaseSensitiveCheck().isSelected()));
             properties.put("drives", String.join(",", drivePanel.getSelectedDrives()));
             properties.put("includesMode", knownIncludesAllMode ? "ALL" : "ANY");
+            properties.put("useAllCores", Boolean.toString(useAllCores));
 
             final File file = settingsFile.toFile();
             try (final FileOutputStream fileOutputStream = new FileOutputStream(file)) {
@@ -471,6 +476,11 @@ public final class SearchView extends JFrame {
 
             String mode = properties.getProperty("includesMode", "ANY").trim();
             knownIncludesAllMode = "ALL".equalsIgnoreCase(mode);
+
+            String useAll = properties.getProperty("useAllCores", "false").trim();
+            useAllCores = "true".equalsIgnoreCase(useAll);
+            bottomPanel.getPerformanceModeCheck().setSelected(useAllCores);
+            controller.setUseAllCores(useAllCores);
         } catch (final Exception exception) {
             log.warn("Fehler beim Laden der Filtereinstellungen", exception);
         }

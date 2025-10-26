@@ -36,7 +36,7 @@ public class SearchController implements SearchEventListener {
             return false;
         }
 
-        model.setStatus(ok ? "Suche abgebrochen" : "Abbruch fehlgeschlagen");
+        model.setStatus("Suche abgebrochen");
 
         return ok;
     }
@@ -57,6 +57,10 @@ public class SearchController implements SearchEventListener {
     @Override
     public void onError(String message) {
         SwingUtilities.invokeLater(() -> model.setStatus("Fehler: " + message));
+    }
+
+    public void setUseAllCores(boolean useAll) {
+        service.setUseAllCores(useAll);
     }
 
 }
