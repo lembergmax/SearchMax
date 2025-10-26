@@ -1,31 +1,40 @@
-package com.mlprograms.searchmax.view;
+package com.mlprograms.searchmax.model;
 
 import javax.swing.JOptionPane;
 import javax.swing.table.AbstractTableModel;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TextFiltersTableModel extends AbstractTableModel {
+public class FiltersTableModel extends AbstractTableModel {
     public static class Entry {
         public boolean enabled;
         public String pattern;
         public boolean caseSensitive;
+        public boolean exclude;
 
-        public Entry(boolean enabled, String pattern) {
+        public Entry(boolean enabled, String pattern, boolean exclude) {
             this.enabled = enabled;
             this.pattern = pattern;
-            this.caseSensitive = false;
+            this.exclude = exclude;
         }
     }
 
     private final List<Entry> entries = new ArrayList<>();
-    private final String[] cols = {"Aktiv","Muster","Groß-/Kleinschreibung beachten",""};
+    private final String[] cols = {"Aktiv","Muster","Groß-/Kleinschreibung beachten","Ausschließen",""};
 
-    public List<Entry> getEntries() { return entries; }
+    public List<Entry> getEntries() {
+        return entries;
+    }
 
     public void addEntry(String p, boolean enabled) {
+        addEntry(p, enabled, false);
+    }
+
+    public void addEntry(String p, boolean enabled, boolean exclude) {
         for (Entry e : entries) if (e.pattern.equals(p)) return;
-        entries.add(new Entry(enabled, p));
+        Entry ne = new Entry(enabled, p, exclude);
+        ne.caseSensitive = false;
+        entries.add(ne);
         fireTableDataChanged();
     }
 
@@ -41,11 +50,31 @@ public class TextFiltersTableModel extends AbstractTableModel {
         fireTableDataChanged();
     }
 
-    @Override public int getRowCount() { return entries.size(); }
-    @Override public int getColumnCount() { return cols.length; }
-    @Override public String getColumnName(int column) { return cols[column]; }
-    @Override public Class<?> getColumnClass(int columnIndex) { return columnIndex == 0 || columnIndex == 2 ? Boolean.class : (columnIndex == 1 ? String.class : Object.class); }
-    @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return columnIndex == 0 || columnIndex == 1 || columnIndex == 2 || columnIndex == 3; }
+    @Override
+    public int getRowCount() {
+        return entries.size();
+    }
+
+    @Override
+    public int getColumnCount() {
+        return cols.length;
+    }
+
+    @Override
+    public String getColumnName(int column) {
+        return cols[column];
+    }
+
+    @Override
+    public Class<?> getColumnClass(int columnIndex) {
+        if (columnIndex == 0 || columnIndex == 2 || columnIndex == 3) return Boolean.class;
+        return columnIndex == 1 ? String.class : Object.class;
+    }
+
+    @Override
+    public boolean isCellEditable(int rowIndex, int columnIndex) {
+        return columnIndex == 0 || columnIndex == 1 || columnIndex == 2 || columnIndex == 3 || columnIndex == 4;
+    }
 
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
@@ -54,6 +83,7 @@ public class TextFiltersTableModel extends AbstractTableModel {
             case 0: return e.enabled;
             case 1: return e.pattern;
             case 2: return e.caseSensitive;
+            case 3: return e.exclude;
             default: return "Entfernen";
         }
     }
@@ -80,8 +110,11 @@ public class TextFiltersTableModel extends AbstractTableModel {
         } else if (columnIndex == 2 && aValue instanceof Boolean) {
             e.caseSensitive = (Boolean) aValue;
             fireTableCellUpdated(rowIndex, columnIndex);
+        } else if (columnIndex == 3 && aValue instanceof Boolean) {
+            e.exclude = (Boolean) aValue;
+            fireTableCellUpdated(rowIndex, columnIndex);
         }
     }
 
-    public int getRemoveColumnIndex() { return 3; }
+    public int getRemoveColumnIndex() { return 4; }
 }

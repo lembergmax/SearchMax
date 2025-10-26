@@ -1,5 +1,10 @@
 package com.mlprograms.searchmax.view;
 
+import com.mlprograms.searchmax.model.AllowExtensionsTableModel;
+import com.mlprograms.searchmax.model.DenyExtensionsTableModel;
+import com.mlprograms.searchmax.model.ExtensionsTableModelBase;
+import com.mlprograms.searchmax.model.TextFiltersTableModel;
+
 import javax.swing.*;
 import java.awt.*;
 import java.util.LinkedHashMap;

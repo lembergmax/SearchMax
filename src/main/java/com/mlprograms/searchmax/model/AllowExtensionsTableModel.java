@@ -1,4 +1,4 @@
-package com.mlprograms.searchmax.view;
+package com.mlprograms.searchmax.model;
 
 public class AllowExtensionsTableModel extends ExtensionsTableModelBase {
 }
