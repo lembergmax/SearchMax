@@ -101,7 +101,7 @@ public final class SearchView extends JFrame {
      * @param model      Das zugehörige Model
      */
     public SearchView(final SearchController controller, final SearchModel model) {
-        super("SearchMax");
+        super(GuiConstants.TITLE_SEARCHMAX);
         this.controller = controller;
         this.model = model;
 
@@ -189,7 +189,7 @@ public final class SearchView extends JFrame {
      */
     void onBrowse() {
         final JFileChooser jFileChooser = new JFileChooser();
-        jFileChooser.setDialogTitle("Ordner auswählen");
+        jFileChooser.setDialogTitle(GuiConstants.CHOOSER_SELECT_FOLDER);
         jFileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         jFileChooser.setAcceptAllFileFilterUsed(false);
 
@@ -242,7 +242,7 @@ public final class SearchView extends JFrame {
 
         if (!selectedDrives.isEmpty()) {
             if ((query == null || query.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Bitte einen Suchtext oder Dateityp angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, GuiConstants.MSG_ENTER_QUERY_OR_TYPE, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
                 return;
             }
             controller.startSearch("", query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode);
@@ -250,11 +250,11 @@ public final class SearchView extends JFrame {
         }
 
         if (folder == null || folder.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Bitte einen Startordner angeben oder ein Laufwerk auswählen.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_START_FOLDER, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
             return;
         }
         if ((query == null || query.trim().isEmpty()) && extensionsAllow.isEmpty() && includes.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Bitte einen Suchtext, Dateityp oder mindestens einen 'Soll enthalten'-Filter angeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_QUERY_OR_TYPE_OR_FILTER, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
             return;
         }
 

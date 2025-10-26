@@ -8,14 +8,14 @@ import java.awt.*;
 @Getter
 public final class BottomPanel extends JPanel {
 
-    private final JLabel statusLabel = new JLabel("Bereit");
+    private final JLabel statusLabel = new JLabel(GuiConstants.STATUS_READY);
     private final JProgressBar progressBar = new JProgressBar();
-    private final JCheckBox performanceModeCheck = new JCheckBox("Leistungsmodus");
+    private final JCheckBox performanceModeCheck = new JCheckBox(GuiConstants.PERFORMANCE_MODE);
 
     public BottomPanel() {
         super(new BorderLayout());
         JPanel info = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        info.add(new JLabel("Status: "));
+        info.add(new JLabel(GuiConstants.STATUS_LABEL_PREFIX));
         info.add(statusLabel);
         info.add(Box.createHorizontalStrut(16));
         add(info, BorderLayout.WEST);

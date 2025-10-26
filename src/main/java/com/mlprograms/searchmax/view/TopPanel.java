@@ -21,7 +21,7 @@ public final class TopPanel extends JPanel {
     /**
      * Schaltfläche zum Durchsuchen von Ordnern.
      */
-    private final JButton browseButton = new JButton("Durchsuchen...");
+    private final JButton browseButton = new JButton(GuiConstants.BROWSE_BUTTON);
     /**
      * Textfeld zur Eingabe des Suchtexts.
      */
@@ -29,19 +29,19 @@ public final class TopPanel extends JPanel {
     /**
      * Checkbox zur Beachtung der Groß-/Kleinschreibung.
      */
-    private final JCheckBox caseSensitiveCheck = new JCheckBox("Groß-/Kleinschreibung beachten");
+    private final JCheckBox caseSensitiveCheck = new JCheckBox(GuiConstants.CASE_SENSITIVE);
     /**
      * Schaltfläche zum Starten der Suche.
      */
-    private final JButton searchButton = new JButton("Suche");
+    private final JButton searchButton = new JButton(GuiConstants.SEARCH_BUTTON);
     /**
      * Schaltfläche zum Abbrechen der Suche.
      */
-    private final JButton cancelButton = new JButton("Abbrechen");
+    private final JButton cancelButton = new JButton(GuiConstants.CANCEL_BUTTON);
     /**
      * Schaltfläche zum Verwalten der Filter.
      */
-    private final JButton manageFiltersButton = new JButton("Filter verwalten...");
+    private final JButton manageFiltersButton = new JButton(GuiConstants.MANAGE_FILTERS);
 
     /**
      * Referenz auf die übergeordnete SearchView.
@@ -69,7 +69,7 @@ public final class TopPanel extends JPanel {
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.anchor = GridBagConstraints.WEST;
-        add(new JLabel("Ordner"), gbc);
+        add(new JLabel(GuiConstants.LABEL_FOLDER), gbc);
 
         extracted(gbc, folderField, browseButton);
 
@@ -84,7 +84,7 @@ public final class TopPanel extends JPanel {
         gbc.gridwidth = 1;
         gbc.fill = GridBagConstraints.NONE;
         gbc.weightx = 0;
-        add(new JLabel("Suchtext"), gbc);
+        add(new JLabel(GuiConstants.LABEL_SEARCHTEXT), gbc);
 
         extracted(gbc, queryField, manageFiltersButton);
 

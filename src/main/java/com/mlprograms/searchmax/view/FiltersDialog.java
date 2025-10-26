@@ -22,7 +22,7 @@ public class FiltersDialog extends JDialog {
     private boolean includeAllMode = false;
 
     public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase, boolean initialIncludeAllMode) {
-        super(owner, "Dateiname-Filter verwalten", true);
+        super(owner, GuiConstants.FILTERS_DIALOG_TITLE, true);
         this.initialExtensionsAllow = initialExtensionsAllow == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsAllow);
         this.initialExtensionsDeny = initialExtensionsDeny == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsDeny);
         this.initialIncludesCase = initialIncludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialIncludesCase);
@@ -83,7 +83,7 @@ public class FiltersDialog extends JDialog {
 
     private Component createTextFiltersPanel() {
         JPanel panel = new JPanel(new BorderLayout(4, 4));
-        panel.setBorder(BorderFactory.createTitledBorder("Dateiname-Filter"));
+        panel.setBorder(BorderFactory.createTitledBorder(GuiConstants.FILTERS_PANEL_TITLE));
 
         JTable includeTable = new JTable(includesTextModel);
         configureTextTable(includeTable, includesTextModel);
@@ -91,14 +91,14 @@ public class FiltersDialog extends JDialog {
         configureTextTable(excludeTable, excludesTextModel);
 
         JTabbedPane tabs = new JTabbedPane();
-        tabs.add("Zulassen", new JScrollPane(includeTable));
-        tabs.add("Ausschließen", new JScrollPane(excludeTable));
+        tabs.add(GuiConstants.TAB_ALLOW, new JScrollPane(includeTable));
+        tabs.add(GuiConstants.TAB_DENY, new JScrollPane(excludeTable));
 
         panel.add(tabs, BorderLayout.CENTER);
 
         JPanel topOptions = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JRadioButton anyBtn = new JRadioButton("Mindestens ein Filter muss passen (ODER)");
-        JRadioButton allBtn = new JRadioButton("Alle Filter müssen passen (UND)");
+        JRadioButton anyBtn = new JRadioButton(GuiConstants.RADIO_ANY);
+        JRadioButton allBtn = new JRadioButton(GuiConstants.RADIO_ALL);
         ButtonGroup group = new ButtonGroup();
         group.add(anyBtn);
         group.add(allBtn);
@@ -112,11 +112,11 @@ public class FiltersDialog extends JDialog {
 
         JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
         Dimension small = new Dimension(120, 24);
-        JButton add = new JButton("Hinzufügen");
+        JButton add = new JButton(GuiConstants.BUTTON_ADD);
         add.setPreferredSize(small);
-        JButton enableAll = new JButton("Alle aktivieren");
+        JButton enableAll = new JButton(GuiConstants.BUTTON_ENABLE_ALL);
         enableAll.setPreferredSize(small);
-        JButton disableAll = new JButton("Alle deaktivieren");
+        JButton disableAll = new JButton(GuiConstants.BUTTON_DISABLE_ALL);
         disableAll.setPreferredSize(small);
         btnBar.add(add);
         btnBar.add(enableAll);
@@ -124,7 +124,7 @@ public class FiltersDialog extends JDialog {
         panel.add(btnBar, BorderLayout.SOUTH);
 
         add.addActionListener(e -> {
-            String raw = JOptionPane.showInputDialog(this, "Neues Muster (z.B. Teil des Dateinamens):", "Hinzufügen", JOptionPane.PLAIN_MESSAGE);
+            String raw = JOptionPane.showInputDialog(this, GuiConstants.INPUT_ADD_PATTERN, GuiConstants.INPUT_ADD_TITLE, JOptionPane.PLAIN_MESSAGE);
             if (raw != null) {
                 String t = raw.trim();
                 if (t.isEmpty()) return;
@@ -157,7 +157,7 @@ public class FiltersDialog extends JDialog {
 
     private Component createExtensionsPanel() {
         JPanel extPanel = new JPanel(new BorderLayout(4, 4));
-        extPanel.setBorder(BorderFactory.createTitledBorder("Dateityp"));
+        extPanel.setBorder(BorderFactory.createTitledBorder(GuiConstants.EXT_PANEL_TITLE));
 
         AllowExtensionsTableModel allowModel = new AllowExtensionsTableModel();
         DenyExtensionsTableModel denyModel = new DenyExtensionsTableModel();
@@ -170,18 +170,18 @@ public class FiltersDialog extends JDialog {
         configureExtensionTable(denyTable, denyModel);
 
         JTabbedPane tabs = new JTabbedPane();
-        tabs.add("Zulassen", new JScrollPane(allowTable));
-        tabs.add("Ausschließen", new JScrollPane(denyTable));
+        tabs.add(GuiConstants.TAB_ALLOW, new JScrollPane(allowTable));
+        tabs.add(GuiConstants.TAB_DENY, new JScrollPane(denyTable));
 
         extPanel.add(tabs, BorderLayout.CENTER);
 
         JPanel extBtnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
         Dimension small = new Dimension(120, 24);
-        JButton extAdd = new JButton("Hinzufügen");
+        JButton extAdd = new JButton(GuiConstants.BUTTON_ADD);
         extAdd.setPreferredSize(small);
-        JButton extEnableAll = new JButton("Alle aktivieren");
+        JButton extEnableAll = new JButton(GuiConstants.BUTTON_ENABLE_ALL);
         extEnableAll.setPreferredSize(small);
-        JButton extDisableAll = new JButton("Alle deaktivieren");
+        JButton extDisableAll = new JButton(GuiConstants.BUTTON_DISABLE_ALL);
         extDisableAll.setPreferredSize(small);
         extBtnBar.add(extAdd);
         extBtnBar.add(extEnableAll);
@@ -189,7 +189,7 @@ public class FiltersDialog extends JDialog {
         extPanel.add(extBtnBar, BorderLayout.SOUTH);
 
         extAdd.addActionListener(e -> {
-            String raw = JOptionPane.showInputDialog(this, "Neuer Dateityp (z.B. .txt):", "Hinzufügen", JOptionPane.PLAIN_MESSAGE);
+            String raw = JOptionPane.showInputDialog(this, GuiConstants.INPUT_NEW_EXTENSION, GuiConstants.INPUT_ADD_TITLE, JOptionPane.PLAIN_MESSAGE);
             if (raw != null) {
                 String t = raw.trim().toLowerCase();
                 if (t.isEmpty()) return;
@@ -197,13 +197,13 @@ public class FiltersDialog extends JDialog {
                 int idx = tabs.getSelectedIndex();
                 if (idx == 0) {
                     if (allowModel.contains(t)) {
-                        JOptionPane.showMessageDialog(this, "Endung existiert bereits.", "Fehler", JOptionPane.WARNING_MESSAGE);
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_EXTENSION_EXISTS, GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
                     } else {
                         allowModel.add(t, true);
                     }
                 } else {
                     if (denyModel.contains(t)) {
-                        JOptionPane.showMessageDialog(this, "Endung existiert bereits.", "Fehler", JOptionPane.WARNING_MESSAGE);
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_EXTENSION_EXISTS, GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
                     } else {
                         denyModel.add(t, true);
                     }
@@ -288,8 +288,8 @@ public class FiltersDialog extends JDialog {
 
     private JPanel createBottomPanel() {
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton ok = new JButton("OK");
-        JButton cancel = new JButton("Abbrechen");
+        JButton ok = new JButton(GuiConstants.BUTTON_OK);
+        JButton cancel = new JButton(GuiConstants.CANCEL_BUTTON);
         bottom.add(ok);
         bottom.add(cancel);
         ok.addActionListener(e -> {
