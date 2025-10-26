@@ -267,7 +267,7 @@ public final class SearchService {
             final int left = handle.getRemainingTasks().decrementAndGet();
             if (left <= 0) {
                 final int total = handle.getMatchCount().get();
-                listener.onEnd(String.format("%d Treffer", total));
+                listener.onEnd(String.format("%d gefundene Dateien", total));
                 searches.entrySet().removeIf(e -> e.getValue() == handle);
             }
         } catch (Exception e) {
@@ -294,7 +294,7 @@ public final class SearchService {
     private void checkComplete(SearchHandle handle, SearchEventListener listener) {
         if (handle.getRemainingTasks().get() <= 0) {
             final int total = handle.getMatchCount().get();
-            listener.onEnd(String.format("%d Treffer", total));
+            listener.onEnd(String.format("%d gefundene Dateien", total));
             searches.entrySet().removeIf(e -> e.getValue() == handle);
         }
     }
