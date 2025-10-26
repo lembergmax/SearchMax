@@ -2,6 +2,7 @@ package com.mlprograms.searchmax.service;
 
 import com.mlprograms.searchmax.DirectoryTask;
 import com.mlprograms.searchmax.SearchHandle;
+import com.mlprograms.searchmax.view.GuiConstants;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -24,7 +25,12 @@ public final class SearchService {
     }
 
     public synchronized void setUseAllCores(boolean useAll) {
-        int desired = useAll ? Math.max(1, Runtime.getRuntime().availableProcessors()) : 1;
+        // Begrenze die maximale Parallelität, um zu verhindern, dass auf Systemen mit
+        // vielen Kernen zu viele Threads (und damit Stack/VM-Reservations) angelegt werden,
+        // was zu nativen Speicher-Allokationsfehlern führen kann.
+        final int available = Math.max(1, Runtime.getRuntime().availableProcessors());
+        final int MAX_PARALLEL = 4; // konservativer Grenzwert für typische Desktop-Systeme
+        int desired = useAll ? Math.max(1, Math.min(available, MAX_PARALLEL)) : 1;
         if (pool != null && pool.getParallelism() == desired) return;
         // replace pool for subsequent searches
         ForkJoinPool newPool = new ForkJoinPool(desired);
@@ -306,7 +312,7 @@ public final class SearchService {
             final int left = handle.getRemainingTasks().decrementAndGet();
             if (left <= 0) {
                 final int total = handle.getMatchCount().get();
-                listener.onEnd(String.format("%d gefundene Dateien", total));
+                listener.onEnd(String.format("%d " + GuiConstants.FILES_FOUND, total));
                 searches.entrySet().removeIf(e -> e.getValue() == handle);
             }
         } catch (Exception e) {
@@ -333,7 +339,7 @@ public final class SearchService {
     private void checkComplete(SearchHandle handle, SearchEventListener listener) {
         if (handle.getRemainingTasks().get() <= 0) {
             final int total = handle.getMatchCount().get();
-            listener.onEnd(String.format("%d gefundene Dateien", total));
+            listener.onEnd(String.format("%d " + GuiConstants.FILES_FOUND, total));
             searches.entrySet().removeIf(e -> e.getValue() == handle);
         }
     }

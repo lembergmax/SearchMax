@@ -350,54 +350,94 @@ public final class DirectoryTask extends RecursiveAction {
 
         try {
             long size = Files.size(filePath);
-            if (size > 5 * 1024 * 1024) {
-                // Zu groß: skip content filters to avoid heavy IO
+            if (size > 50 * 1024 * 1024) {
+                // Dateien über 50 MB werden nicht vollständig gelesen, um OOM zu vermeiden
+                // Wir überspringen die Inhaltsprüfung für sehr große Dateien
                 return true;
             }
-            String content = new String(Files.readAllBytes(filePath));
 
-            // Prüfe Exclude-Filter zuerst: wenn ein Exclude-Filter passt, Datei ausschließen
+            // Wenn Exclude-Filter gesetzt sind, prüfen wir zuerst (falls ein Exclude passt, aussortieren)
             if (contentExcludeFilters != null && !contentExcludeFilters.isEmpty()) {
-                if (matchesContentStringFilters(content, contentExcludeFilters, contentExcludeCaseMap, false)) {
+                if (matchesContentStreamFilters(filePath, contentExcludeFilters, contentExcludeCaseMap, false)) {
                     return false;
                 }
             }
 
-            // Prüfe Include-Filter: wenn gesetzt, müssen mindestens einer (oder alle) passen
             if (contentIncludeFilters != null && !contentIncludeFilters.isEmpty()) {
-                return matchesContentStringFilters(content, contentIncludeFilters, contentIncludeCaseMap, contentIncludeAllMode);
+                return matchesContentStreamFilters(filePath, contentIncludeFilters, contentIncludeCaseMap, contentIncludeAllMode);
             }
 
             return true;
         } catch (Exception e) {
+            // Bei Fehlern lieber nicht aussortieren
             return true;
         }
     }
 
-    // Helper für Content-String-Matching (Case-Sensitivity wird per caseMap gesteuert)
-    private boolean matchesContentStringFilters(final String source, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
-        if (filters == null || filters.isEmpty()) {
-            return false;
+    // Streaming-basierte Variante der Content-Filter-Prüfung. Liest die Datei zeilenweise
+    // und prüft die Filter stückweise, um Heap/Native-Memory-Allokationen zu vermeiden.
+    private boolean matchesContentStreamFilters(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
+        if (filters == null || filters.isEmpty()) return false;
+
+        // Prepare filter entries
+        class F { String pattern; boolean caseSensitive; String patternKey; }
+        java.util.List<F> fl = new java.util.ArrayList<>();
+        int maxLen = 0;
+        for (String f : filters) {
+            if (f == null) continue;
+            String p = f.trim();
+            if (p.isEmpty()) continue;
+            F fe = new F();
+            fe.pattern = p;
+            fe.caseSensitive = caseMap != null && Boolean.TRUE.equals(caseMap.get(p));
+            fe.patternKey = fe.caseSensitive ? p : p.toLowerCase(java.util.Locale.ROOT);
+            fl.add(fe);
+            if (fe.patternKey.length() > maxLen) maxLen = fe.patternKey.length();
         }
 
-        if (requireAll) {
-            for (String filter : filters) {
-                if (filter == null || filter.isEmpty()) continue;
-                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
-                boolean matched = caseSensitiveFilter ? source.contains(filter) : source.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
-                if (!matched) return false;
-            }
-            return true;
-        } else {
-            for (String filter : filters) {
-                if (filter == null || filter.isEmpty()) continue;
-                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
-                if (caseSensitiveFilter) {
-                    if (source.contains(filter)) return true;
-                } else {
-                    if (source.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT))) return true;
+        if (fl.isEmpty()) return false;
+
+        boolean[] matched = new boolean[fl.size()];
+        try (java.io.BufferedReader reader = java.nio.file.Files.newBufferedReader(filePath)) {
+            String line;
+            String tail = "";
+            while ((line = reader.readLine()) != null) {
+                if (isCancelledOrInvalid()) return false; // abbrechen bei Cancel
+
+                String chunk = tail + "\n" + line; // behalte newline, falls patterns Zeilenübergriff haben
+                String lowerChunk = null; // lazy
+
+                for (int i = 0; i < fl.size(); i++) {
+                    if (matched[i]) continue; // bereits gefunden
+                    F fe = fl.get(i);
+                    boolean found;
+                    if (fe.caseSensitive) {
+                        found = chunk.contains(fe.patternKey);
+                    } else {
+                        if (lowerChunk == null) lowerChunk = chunk.toLowerCase(java.util.Locale.ROOT);
+                        found = lowerChunk.contains(fe.patternKey);
+                    }
+                    if (found) matched[i] = true;
                 }
+
+                // für requireAll=false können wir früh abbrechen, sobald ein Treffer vorliegt
+                if (!requireAll) {
+                    for (boolean b : matched) if (b) return true;
+                }
+
+                // slice tail für Grenzfälle über Zeilenende: behalte maxLen-1 Zeichen
+                if (chunk.length() > maxLen) tail = chunk.substring(chunk.length() - Math.min(maxLen, maxLen));
+                else tail = chunk;
             }
+
+            if (requireAll) {
+                for (boolean b : matched) if (!b) return false;
+                return true;
+            } else {
+                for (boolean b : matched) if (b) return true;
+                return false;
+            }
+        } catch (Exception e) {
             return false;
         }
     }
