@@ -68,13 +68,6 @@
             <artifactId>poi-ooxml</artifactId>
             <version>${poi.version}</version>
         </dependency>
-        <!-- OOXML schemas (full) used by POI to handle various Office formats -->
-        <dependency>
-            <groupId>org.apache.ooxml</groupId>
-            <artifactId>ooxml-schemas</artifactId>
-            <version>1.4</version>
-        </dependency>
-        <!-- Alte/zusätzliche Formate (HWPF/HSLF, ggf. nötig für einige Extraktoren) -->
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-scratchpad</artifactId>
