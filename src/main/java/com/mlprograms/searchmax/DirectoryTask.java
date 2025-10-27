@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
@@ -119,37 +120,12 @@ public final class DirectoryTask extends RecursiveAction {
      */
     private final boolean includeAllMode;
 
-    // Neue Felder für Inhaltsfilter
     private final List<String> contentIncludeFilters;
     private final Map<String, Boolean> contentIncludeCaseMap;
     private final List<String> contentExcludeFilters;
     private final Map<String, Boolean> contentExcludeCaseMap;
     private final boolean contentIncludeAllMode;
 
-    /**
-     * Erstellt eine neue DirectoryTask mit den angegebenen Parametern.
-     *
-     * @param directoryPath     Das zu durchsuchende Verzeichnis
-     * @param result            Sammlung für gefundene Ergebnisse
-     * @param matchCount        Zähler für Treffer
-     * @param query             Suchbegriff für Dateinamen
-     * @param startTimeNano     Startzeitpunkt der Suche (nanoTime)
-     * @param emitter           Optionaler Consumer für gefundene Ergebnisse
-     * @param cancelled         Abbruch-Flag
-     * @param caseSensitive     Groß-/Kleinschreibung bei Suche beachten
-     * @param allowedExtensions Liste erlaubter Dateiendungen
-     * @param deniedExtensions  Liste ausgeschlossener Dateiendungen
-     * @param includeFilters    Liste von Include-Filtern
-     * @param includeCaseMap    Case-Sensitivity-Map für Include-Filter
-     * @param excludeFilters    Liste von Exclude-Filtern
-     * @param excludeCaseMap    Case-Sensitivity-Map für Exclude-Filter
-     * @param includeAllMode    Ob alle Include-Filter erfüllt sein müssen
-     */
-    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode) {
-        this(directoryPath, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, null, null, null, null, false);
-    }
-
-    // Neuer Konstruktor mit Inhalts-Filter-Parametern
     public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode, final List<String> contentIncludeFilters, final Map<String, Boolean> contentIncludeCaseMap, final List<String> contentExcludeFilters, final Map<String, Boolean> contentExcludeCaseMap, final boolean contentIncludeAllMode) {
         this.directoryPath = directoryPath;
         this.result = (result == null) ? new ConcurrentLinkedQueue<>() : result;
@@ -306,7 +282,6 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
-    // Prüft, ob der Pfad eine erlaubte Endung hat und keine ausgeschlossene.
     private boolean matchesExtensions(final String fileName) {
         final String lower = fileName.toLowerCase(Locale.ROOT);
 
@@ -330,7 +305,6 @@ public final class DirectoryTask extends RecursiveAction {
         return true;
     }
 
-    // Formatiert das Ergebnis für eine gefundene Datei inkl. Zeitstempel.
     private String formatFileResult(final Path filePath) {
         final long elapsedNanos = System.nanoTime() - startTimeNano;
         final long centis = elapsedNanos / 10_000_000L;
@@ -341,22 +315,18 @@ public final class DirectoryTask extends RecursiveAction {
         return String.format("[%d.%02ds] %s", whole, cents, pathString);
     }
 
-    // Prüft Inhalte der Datei gemäß den Content-Filtern
     private boolean matchesContentFilters(final Path filePath) {
-        // Wenn keine Content-Filter gesetzt sind, akzeptieren
         if ((contentIncludeFilters == null || contentIncludeFilters.isEmpty()) && (contentExcludeFilters == null || contentExcludeFilters.isEmpty())) {
             return true;
         }
 
         try {
+            // TODO: irgendwie anders einlesen damit alle dateien eingelesen werden
             long size = Files.size(filePath);
             if (size > 50 * 1024 * 1024) {
-                // Dateien über 50 MB werden nicht vollständig gelesen, um OOM zu vermeiden
-                // Wir überspringen die Inhaltsprüfung für sehr große Dateien
                 return true;
             }
 
-            // Wenn Exclude-Filter gesetzt sind, prüfen wir zuerst (falls ein Exclude passt, aussortieren)
             if (contentExcludeFilters != null && !contentExcludeFilters.isEmpty()) {
                 if (matchesContentStreamFilters(filePath, contentExcludeFilters, contentExcludeCaseMap, false)) {
                     return false;
@@ -368,76 +338,111 @@ public final class DirectoryTask extends RecursiveAction {
             }
 
             return true;
-        } catch (Exception e) {
-            // Bei Fehlern lieber nicht aussortieren
+        } catch (final Exception exception) {
             return true;
         }
     }
 
-    // Streaming-basierte Variante der Content-Filter-Prüfung. Liest die Datei zeilenweise
-    // und prüft die Filter stückweise, um Heap/Native-Memory-Allokationen zu vermeiden.
-    private boolean matchesContentStreamFilters(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
-        if (filters == null || filters.isEmpty()) return false;
+    private static class FilterEntity {
+        String pattern;
+        boolean caseSensitive;
+        String patternKey;
+    }
 
-        // Prepare filter entries
-        class F { String pattern; boolean caseSensitive; String patternKey; }
-        java.util.List<F> fl = new java.util.ArrayList<>();
-        int maxLen = 0;
-        for (String f : filters) {
-            if (f == null) continue;
-            String p = f.trim();
-            if (p.isEmpty()) continue;
-            F fe = new F();
-            fe.pattern = p;
-            fe.caseSensitive = caseMap != null && Boolean.TRUE.equals(caseMap.get(p));
-            fe.patternKey = fe.caseSensitive ? p : p.toLowerCase(java.util.Locale.ROOT);
-            fl.add(fe);
-            if (fe.patternKey.length() > maxLen) maxLen = fe.patternKey.length();
+    private boolean matchesContentStreamFilters(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
+        if (filters == null || filters.isEmpty()) {
+            return false;
         }
 
-        if (fl.isEmpty()) return false;
+        List<FilterEntity> filterList = new java.util.ArrayList<>();
+        int maxLength = 0;
+        for (String filter : filters) {
+            if (filter == null) {
+                continue;
+            }
 
-        boolean[] matched = new boolean[fl.size()];
-        try (java.io.BufferedReader reader = java.nio.file.Files.newBufferedReader(filePath)) {
+            String trimmedFilter = filter.trim();
+            if (trimmedFilter.isEmpty()) {
+                continue;
+            }
+
+            FilterEntity filterEntity = new FilterEntity();
+            filterEntity.pattern = trimmedFilter;
+            filterEntity.caseSensitive = caseMap != null && Boolean.TRUE.equals(caseMap.get(trimmedFilter));
+            filterEntity.patternKey = filterEntity.caseSensitive ? trimmedFilter : trimmedFilter.toLowerCase(java.util.Locale.ROOT);
+            filterList.add(filterEntity);
+
+            if (filterEntity.patternKey.length() > maxLength) {
+                maxLength = filterEntity.patternKey.length();
+            }
+        }
+
+        if (filterList.isEmpty()) {
+            return false;
+        }
+
+        boolean[] matched = new boolean[filterList.size()];
+        try (final BufferedReader reader = Files.newBufferedReader(filePath)) {
             String line;
             String tail = "";
+
             while ((line = reader.readLine()) != null) {
-                if (isCancelledOrInvalid()) return false; // abbrechen bei Cancel
+                if (isCancelledOrInvalid()) {
+                    return false;
+                }
 
-                String chunk = tail + "\n" + line; // behalte newline, falls patterns Zeilenübergriff haben
-                String lowerChunk = null; // lazy
+                String chunk = tail + "\n" + line;
+                String lowerChunk = null;
 
-                for (int i = 0; i < fl.size(); i++) {
-                    if (matched[i]) continue; // bereits gefunden
-                    F fe = fl.get(i);
-                    boolean found;
-                    if (fe.caseSensitive) {
-                        found = chunk.contains(fe.patternKey);
-                    } else {
-                        if (lowerChunk == null) lowerChunk = chunk.toLowerCase(java.util.Locale.ROOT);
-                        found = lowerChunk.contains(fe.patternKey);
+                for (int i = 0; i < filterList.size(); i++) {
+                    if (matched[i]) {
+                        continue;
                     }
-                    if (found) matched[i] = true;
+
+                    FilterEntity filterEntity = filterList.get(i);
+                    boolean found;
+                    if (filterEntity.caseSensitive) {
+                        found = chunk.contains(filterEntity.patternKey);
+                    } else {
+                        if (lowerChunk == null) lowerChunk = chunk.toLowerCase(Locale.ROOT);
+                        found = lowerChunk.contains(filterEntity.patternKey);
+                    }
+                    if (found) {
+                        matched[i] = true;
+                    }
                 }
 
-                // für requireAll=false können wir früh abbrechen, sobald ein Treffer vorliegt
                 if (!requireAll) {
-                    for (boolean b : matched) if (b) return true;
+                    for (boolean bool : matched) {
+                        if (bool) return true;
+                    }
                 }
 
-                // slice tail für Grenzfälle über Zeilenende: behalte maxLen-1 Zeichen
-                if (chunk.length() > maxLen) tail = chunk.substring(chunk.length() - Math.min(maxLen, maxLen));
-                else tail = chunk;
+                if (chunk.length() > maxLength) {
+                    tail = chunk.substring(chunk.length() - /*TODO:*/ Math.min(maxLength, maxLength));
+                } else {
+                    tail = chunk;
+                }
             }
 
             if (requireAll) {
-                for (boolean b : matched) if (!b) return false;
+                for (boolean match : matched) {
+                    if (!match) {
+                        return false;
+                    }
+                }
+
                 return true;
             } else {
-                for (boolean b : matched) if (b) return true;
+                for (boolean match : matched) {
+                    if (match) {
+                        return true;
+                    }
+                }
+
                 return false;
             }
-        } catch (Exception e) {
+        } catch (final Exception exception) {
             return false;
         }
     }
@@ -540,9 +545,6 @@ public final class DirectoryTask extends RecursiveAction {
         return fileName;
     }
 
-    /**
-     * Prüft, ob der Quellstring das Ziel enthält, optional ohne Beachtung der Groß-/Kleinschreibung.
-     */
     private boolean containsIgnoreCase(final String source, final String target) {
         if (target == null || target.isEmpty()) {
             return true;

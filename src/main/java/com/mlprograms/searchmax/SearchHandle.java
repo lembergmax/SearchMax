@@ -90,7 +90,7 @@ public final class SearchHandle {
      *
      * @param task Die zu setzende ForkJoinTask
      */
-    public void setTask(ForkJoinTask<?> task) {
+    public void setTask(final ForkJoinTask<?> task) {
         this.task = task;
         addTask(task);
     }
@@ -100,7 +100,7 @@ public final class SearchHandle {
      *
      * @param task Die hinzuzufügende ForkJoinTask
      */
-    public void addTask(ForkJoinTask<?> task) {
+    public void addTask(final ForkJoinTask<?> task) {
         if (task != null) {
             tasks.add(task);
         }
