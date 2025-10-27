@@ -435,6 +435,7 @@ public final class SearchView extends JFrame {
         topPanel.getCaseSensitiveCheck().setEnabled(!running);
         topPanel.getManageFiltersButton().setEnabled(!running);
         bottomPanel.getPerformanceModeCheck().setEnabled(!running);
+        bottomPanel.getSettingsButton().setEnabled(!running);
         drivePanel.setDrivesEnabled(!running);
         updateFolderFieldState();
     }
