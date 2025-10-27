@@ -69,10 +69,10 @@ public final class CenterPanel extends JPanel {
                     Runtime.getRuntime().exec(new String[]{"explorer.exe", "/select,", f.getAbsolutePath()});
                 }
             } else {
-                JOptionPane.showMessageDialog(this, "Datei existiert nicht: " + path, "Fehler", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, GuiConstants.MSG_FILE_NOT_FOUND_PREFIX + path, GuiConstants.MSG_ERROR_TITLE_GERMAN, JOptionPane.ERROR_MESSAGE);
             }
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Kann Datei nicht öffnen: " + ex.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_CANNOT_OPEN_FILE_PREFIX + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE_GERMAN, JOptionPane.ERROR_MESSAGE);
         }
     }
 

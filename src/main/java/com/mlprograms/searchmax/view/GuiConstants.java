@@ -53,6 +53,7 @@ public final class GuiConstants {
     public static final String MSG_ERROR_TITLE = "Error";
 
     public static final String BUTTON_OK = "OK";
+    public static final String BUTTON_CANCEL = "Cancel";
 
     // Content panel (neu)
     public static final String CONTENT_PANEL_TITLE = "File content";
@@ -67,7 +68,25 @@ public final class GuiConstants {
     // Extensions specific column
     public static final String EXT_COLUMN_EXTENSION = "Extension";
 
-    // Additional column labels
-    public static final String COLUMN_EXCLUDE = "Exclude";
+    // Extraction settings dialog strings
+    public static final String TITLE_EXTRACTION_SETTINGS = "Text extraction settings";
+    public static final String SECTION_EXTRACTION = "Extraction";
+    public static final String RADIO_POI_ONLY = "POI only (fast for Office)";
+    public static final String RADIO_TIKA_ONLY = "Tika only (broad fallback)";
+    public static final String RADIO_POI_THEN_TIKA = "POI then Tika (recommended)";
+
+    // Log / Error messages
+    public static final String MSG_INMEMORY_APPENDER_NOT_FOUND = "InMemory Log Appender not found. Please check the log4j2 configuration.";
+    public static final String MSG_ERROR_OPEN_LOGVIEWER_PREFIX = "Error opening the log viewer: ";
+    public static final String MSG_ERROR_OPEN_SETTINGS_PREFIX = "Error opening the settings: ";
+    public static final String MSG_ERROR_OPEN_LOGS_PREFIX = "Error opening the logs: ";
+
+    // CenterPanel messages
+    public static final String MSG_FILE_NOT_FOUND_PREFIX = "File does not exist: ";
+    public static final String MSG_CANNOT_OPEN_FILE_PREFIX = "Cannot open file: ";
+    public static final String MSG_ERROR_TITLE_GERMAN = "Error";
+
+    // Button labels
+    public static final String BUTTON_SETTINGS = "Settings";
 
 }

@@ -244,11 +244,11 @@ public final class SearchView extends JFrame {
                     }
                 });
             } else {
-                JOptionPane.showMessageDialog(this, "InMemory Log Appender nicht gefunden. Bitte überprüfe die log4j2 Konfiguration.", "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, GuiConstants.MSG_INMEMORY_APPENDER_NOT_FOUND, GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
             }
         } catch (Exception ex) {
             log.warn("Fehler beim Öffnen des Log-Viewers", ex);
-            JOptionPane.showMessageDialog(this, "Fehler beim Öffnen des Log-Viewers: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_LOGVIEWER_PREFIX + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -268,7 +268,7 @@ public final class SearchView extends JFrame {
             }
         } catch (Exception ex) {
             log.warn("Fehler beim Öffnen der Settings", ex);
-            JOptionPane.showMessageDialog(this, "Fehler beim Öffnen der Settings: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_SETTINGS_PREFIX + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
         }
     }
 
