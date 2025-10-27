@@ -12,7 +12,7 @@ public class ExtractionSettingsDialog extends JDialog {
     private final JPanel sectionsPanel = new JPanel();
 
     public ExtractionSettingsDialog(Window owner, ExtractionMode current) {
-        super(owner, "Text extraction settings", ModalityType.APPLICATION_MODAL);
+        super(owner, GuiConstants.TITLE_EXTRACTION_SETTINGS, ModalityType.APPLICATION_MODAL);
         initUI(current);
     }
 
@@ -24,11 +24,11 @@ public class ExtractionSettingsDialog extends JDialog {
         // --- Extraction section ---
         JPanel extractionPanel = new JPanel();
         extractionPanel.setLayout(new BoxLayout(extractionPanel, BoxLayout.Y_AXIS));
-        extractionPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Extraction", TitledBorder.LEFT, TitledBorder.TOP));
+        extractionPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), GuiConstants.SECTION_EXTRACTION, TitledBorder.LEFT, TitledBorder.TOP));
 
-        JRadioButton poiOnly = new JRadioButton("POI only (fast for Office)");
-        JRadioButton tikaOnly = new JRadioButton("Tika only (broad fallback)");
-        JRadioButton poiThenTika = new JRadioButton("POI then Tika (recommended)");
+        JRadioButton poiOnly = new JRadioButton(GuiConstants.RADIO_POI_ONLY);
+        JRadioButton tikaOnly = new JRadioButton(GuiConstants.RADIO_TIKA_ONLY);
+        JRadioButton poiThenTika = new JRadioButton(GuiConstants.RADIO_POI_THEN_TIKA);
 
         ButtonGroup group = new ButtonGroup();
         group.add(poiOnly);
@@ -54,8 +54,8 @@ public class ExtractionSettingsDialog extends JDialog {
 
         // Buttons
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton ok = new JButton("OK");
-        JButton cancel = new JButton("Cancel");
+        JButton ok = new JButton(GuiConstants.BUTTON_OK);
+        JButton cancel = new JButton(GuiConstants.BUTTON_CANCEL);
         buttons.add(cancel);
         buttons.add(ok);
         root.add(buttons, BorderLayout.SOUTH);

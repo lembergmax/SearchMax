@@ -12,7 +12,7 @@ public final class BottomPanel extends JPanel {
     private final JProgressBar progressBar = new JProgressBar();
     private final JCheckBox performanceModeCheck = new JCheckBox(GuiConstants.PERFORMANCE_MODE);
     private final JButton logsButton = new JButton(GuiConstants.BUTTON_LOGS);
-    private final JButton settingsButton = new JButton("Settings");
+    private final JButton settingsButton = new JButton(GuiConstants.BUTTON_SETTINGS);
 
     public BottomPanel(SearchView parent) {
         super(new BorderLayout());
@@ -38,7 +38,7 @@ public final class BottomPanel extends JPanel {
             try {
                 parent.onShowLogs();
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Fehler beim Öffnen der Logs: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_LOGS_PREFIX + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
             }
         });
 
@@ -47,7 +47,7 @@ public final class BottomPanel extends JPanel {
             try {
                 parent.onShowSettings();
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Fehler beim Öffnen der Einstellungen: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_SETTINGS_PREFIX + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
             }
         });
     }
