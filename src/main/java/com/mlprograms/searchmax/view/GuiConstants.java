@@ -30,7 +30,7 @@ public final class GuiConstants {
 
     // BottomPanel / Status
     public static final String STATUS_READY = "Ready";
-    public static final String PERFORMANCE_MODE = "Performance mode";
+    public static final String PERFORMANCE_MODE = "Performance mode (use all cores)";
     public static final String STATUS_LABEL_PREFIX = "Status: ";
     public static final String SEARCH_RUNNING_TEXT = "Searching";
 
