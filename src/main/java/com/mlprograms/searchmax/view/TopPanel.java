@@ -42,6 +42,10 @@ public final class TopPanel extends JPanel {
      * Schaltfläche zum Verwalten der Filter.
      */
     private final JButton manageFiltersButton = new JButton(GuiConstants.MANAGE_FILTERS);
+    /**
+     * Schaltfläche zum Anzeigen der Logs.
+     */
+    private final JButton logsButton = new JButton(GuiConstants.BUTTON_LOGS);
 
     /**
      * Referenz auf die übergeordnete SearchView.
@@ -107,6 +111,14 @@ public final class TopPanel extends JPanel {
         gbc.weightx = 0;
         gbc.anchor = GridBagConstraints.WEST;
         add(caseSensitiveCheck, gbc);
+
+        gbc.gridy = 3;
+        gbc.gridx = 3;
+        gbc.gridwidth = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        gbc.anchor = GridBagConstraints.EAST;
+        add(logsButton, gbc);
     }
 
     private void extracted(GridBagConstraints gbc, JTextField folderField, JButton browseButton) {
@@ -129,6 +141,16 @@ public final class TopPanel extends JPanel {
         searchButton.addActionListener(e -> parent.onSearch());
         cancelButton.addActionListener(e -> parent.onCancel());
         manageFiltersButton.addActionListener(e -> parent.onManageFilters());
+        logsButton.addActionListener(e -> {
+            try {
+                java.lang.reflect.Method m = parent.getClass().getMethod("onShowLogs");
+                m.invoke(parent);
+            } catch (NoSuchMethodException nsme) {
+                JOptionPane.showMessageDialog(this, "Log-Funktion nicht verfügbar", "Error", JOptionPane.ERROR_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Fehler beim Öffnen der Logs: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
     }
 
     /**

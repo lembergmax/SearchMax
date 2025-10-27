@@ -58,6 +58,11 @@ public final class SearchView extends JFrame {
     private final StatusUpdater statusUpdater;
 
     /**
+     * Log-Viewer Instanz (wird beim Öffnen gesetzt, null wenn geschlossen)
+     */
+    private LogViewer logViewer = null;
+
+    /**
      * Gibt an, ob aktuell eine Suche läuft.
      */
     private boolean running = false;
@@ -122,8 +127,7 @@ public final class SearchView extends JFrame {
         loadSettings();
 
         bottomPanel.getPerformanceModeCheck().addActionListener(e -> {
-            boolean sel = bottomPanel.getPerformanceModeCheck().isSelected();
-            useAllCores = sel;
+            useAllCores = bottomPanel.getPerformanceModeCheck().isSelected();
             controller.setUseAllCores(useAllCores);
             saveExtensionsToSettings();
         });
@@ -212,6 +216,38 @@ public final class SearchView extends JFrame {
             if (selected != null && selected.isDirectory()) {
                 topPanel.getFolderField().setText(selected.getAbsolutePath());
             }
+        }
+    }
+
+    /**
+     * Zeigt das Log-Viewer-Fenster an. Nutzt den InMemoryLogAppender, welcher in log4j2.xml konfiguriert sein muss.
+     */
+    public void onShowLogs() {
+        try {
+            if (logViewer != null) {
+                logViewer.toFront();
+                logViewer.requestFocus();
+                return;
+            }
+
+            org.apache.logging.log4j.core.LoggerContext ctx = org.apache.logging.log4j.core.LoggerContext.getContext(false);
+            org.apache.logging.log4j.core.config.Configuration cfg = ctx.getConfiguration();
+            org.apache.logging.log4j.core.Appender app = cfg.getAppender("InMemory");
+            if (app instanceof com.mlprograms.searchmax.view.logging.InMemoryLogAppender inMemory) {
+                logViewer = new LogViewer(inMemory);
+                logViewer.setVisible(true);
+                logViewer.addWindowListener(new java.awt.event.WindowAdapter() {
+                    @Override
+                    public void windowClosed(java.awt.event.WindowEvent e) {
+                        logViewer = null;
+                    }
+                });
+            } else {
+                JOptionPane.showMessageDialog(this, "InMemory Log Appender nicht gefunden. Bitte überprüfe die log4j2 Konfiguration.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        } catch (Exception ex) {
+            log.warn("Fehler beim Öffnen des Log-Viewers", ex);
+            JOptionPane.showMessageDialog(this, "Fehler beim Öffnen des Log-Viewers: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 

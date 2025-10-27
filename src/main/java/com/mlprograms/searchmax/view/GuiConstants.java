@@ -16,6 +16,7 @@ public final class GuiConstants {
     public static final String SEARCH_BUTTON = "Search";
     public static final String CANCEL_BUTTON = "Cancel";
     public static final String MANAGE_FILTERS = "Manage filters";
+    public static final String BUTTON_LOGS = "Logs";
     public static final String LABEL_FOLDER = "Folder";
     public static final String LABEL_SEARCHTEXT = "Search text";
     public static final String FILES_FOUND = "Files found";
