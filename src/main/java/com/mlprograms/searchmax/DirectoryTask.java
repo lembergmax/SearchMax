@@ -2,6 +2,7 @@ package com.mlprograms.searchmax;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -12,6 +13,11 @@ import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Durchsucht ein Verzeichnis rekursiv nach Dateien, die bestimmten Filterkriterien entsprechen.
@@ -382,6 +388,11 @@ public final class DirectoryTask extends RecursiveAction {
      * @return true, wenn die Filterbedingungen erfüllt sind, sonst false
      */
     private boolean matchesContentStreamFilters(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
+        // Spezialfall: PDF-Dateien mit PDFBox seitenweise extrahieren (speicherschonend)
+        final String nameLower = filePath.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (nameLower.endsWith(".pdf")) {
+            return matchesPdfContent(filePath, filters, caseMap, requireAll);
+        }
         if (filters == null || filters.isEmpty()) {
             return false;
         }
@@ -418,6 +429,66 @@ public final class DirectoryTask extends RecursiveAction {
             return requireAll ? allMatched(matched) : anyMatched(matched);
         } catch (final Exception exception) {
             return false;
+        }
+    }
+
+    /**
+     * Extrahiert PDF-Text seitenweise und prüft die Filter auf jedem Seiten-Chunk.
+     * Verwendet MemoryUsageSetting.setupTempFileOnly() um OutOfMemory zu vermeiden.
+     */
+    @SneakyThrows
+    private boolean matchesPdfContent(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
+        List<FilterEntity> filterList = buildFilterEntities(filters, caseMap);
+        if (filterList.isEmpty()) {
+            return false;
+        }
+
+        boolean[] matched = new boolean[filterList.size()];
+
+        final PDFTextStripper stripper = new PDFTextStripper();
+
+        final Logger root = Logger.getLogger("org.apache.pdfbox");
+        final Logger fontLogger = Logger.getLogger("org.apache.pdfbox.pdmodel.font.FileSystemFontProvider");
+        final Logger parserLogger = Logger.getLogger("org.apache.pdfbox.pdfparser.BaseParser");
+        final Level prevRoot = root.getLevel();
+        final Level prevFont = fontLogger.getLevel();
+        final Level prevParser = parserLogger.getLevel();
+        try {
+            root.setLevel(Level.SEVERE);
+            fontLogger.setLevel(Level.SEVERE);
+            parserLogger.setLevel(Level.SEVERE);
+
+            try (PDDocument doc = Loader.loadPDF(filePath.toFile())) {
+                final int pages = doc.getNumberOfPages();
+                for (int p = 1; p <= pages; p++) {
+                    if (isCancelledOrInvalid()) {
+                        return false;
+                    }
+
+                    stripper.setStartPage(p);
+                    stripper.setEndPage(p);
+                    String pageText = stripper.getText(doc);
+                    if (pageText == null || pageText.isEmpty()) {
+                        continue;
+                    }
+
+                    final StringBuilder window = new StringBuilder(pageText);
+                    updateMatchedFilters(window, filterList, matched);
+
+                    if (!requireAll && anyMatched(matched)) {
+                        return true;
+                    }
+                }
+
+                return requireAll ? allMatched(matched) : anyMatched(matched);
+            }
+        } catch (final Exception e) {
+            log.debug("PDF parsing failed for {}: {}", filePath, e.getMessage());
+            return false;
+        } finally {
+            root.setLevel(prevRoot);
+            fontLogger.setLevel(prevFont);
+            parserLogger.setLevel(prevParser);
         }
     }
 
