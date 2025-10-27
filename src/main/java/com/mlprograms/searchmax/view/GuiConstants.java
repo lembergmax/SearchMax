@@ -18,7 +18,7 @@ public final class GuiConstants {
     public static final String MANAGE_FILTERS = "Manage filters";
     public static final String BUTTON_LOGS = "Logs";
     public static final String LABEL_FOLDER = "Folder";
-    public static final String LABEL_SEARCHTEXT = "Search text";
+    public static final String LABEL_SEARCHTEXT = "Filename";
     public static final String FILES_FOUND = "File(s) found";
 
     // SearchView / JFileChooser / JOptionPane messages
