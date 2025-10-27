@@ -531,8 +531,45 @@ public final class DirectoryTask extends RecursiveAction {
             return requireAll ? allMatched(matched) : anyMatched(matched);
 
         } catch (Exception e) {
-            log.debug("Office extraction failed for {}: {}", filePath, e.getMessage());
-            return false;
+            log.debug("Office extraction failed for {}: {}. Falling back to Apache Tika.", filePath, e.getMessage());
+            // Fallback: use Apache Tika for extraction
+            try {
+                String text = extractTextWithTika(filePath);
+                if (text == null || text.isEmpty()) return false;
+
+                boolean[] matched = new boolean[filterList.size()];
+                final int maxPatternLen = filterList.stream().mapToInt(fe -> fe.patternKey.length()).max().orElse(0);
+                final int windowSize = Math.max(8 * 1024, maxPatternLen * 2);
+
+                int pos = 0;
+                while (pos < text.length()) {
+                    if (isCancelledOrInvalid()) return false;
+                    int end = Math.min(text.length(), pos + windowSize);
+                    String window = text.substring(pos, end);
+                    StringBuilder sb = new StringBuilder(window);
+                    updateMatchedFilters(sb, filterList, matched);
+
+                    if (!requireAll && anyMatched(matched)) return true;
+                    pos += Math.max(1, windowSize - maxPatternLen);
+                }
+
+                return requireAll ? allMatched(matched) : anyMatched(matched);
+            } catch (Exception ex) {
+                log.debug("Tika extraction failed for {}: {}", filePath, ex.getMessage());
+                return false;
+            }
+        }
+    }
+
+    // Extract text using Apache Tika
+    private String extractTextWithTika(final Path filePath) throws Exception {
+        org.apache.tika.parser.AutoDetectParser parser = new org.apache.tika.parser.AutoDetectParser();
+        org.apache.tika.metadata.Metadata metadata = new org.apache.tika.metadata.Metadata();
+        try (java.io.InputStream is = java.nio.file.Files.newInputStream(filePath)) {
+            org.apache.tika.sax.BodyContentHandler handler = new org.apache.tika.sax.BodyContentHandler(-1);
+            org.apache.tika.parser.ParseContext context = new org.apache.tika.parser.ParseContext();
+            parser.parse(is, handler, metadata, context);
+            return handler.toString();
         }
     }
 
