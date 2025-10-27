@@ -305,6 +305,12 @@ public final class DirectoryTask extends RecursiveAction {
         return true;
     }
 
+    /**
+     * Formatiert das Suchergebnis einer Datei als String mit Zeitstempel.
+     *
+     * @param filePath Pfad zur gefundenen Datei
+     * @return Formatierter String mit Zeitangabe und Dateipfad
+     */
     private String formatFileResult(final Path filePath) {
         final long elapsedNanos = System.nanoTime() - startTimeNano;
         final long centis = elapsedNanos / 10_000_000L;
@@ -545,6 +551,14 @@ public final class DirectoryTask extends RecursiveAction {
         return fileName;
     }
 
+    /**
+     * Prüft, ob der Quell-String das Ziel-Substring enthält, unter Berücksichtigung der Groß-/Kleinschreibung
+     * gemäß der Einstellung der Instanz (caseSensitive).
+     *
+     * @param source Der zu durchsuchende Quell-String
+     * @param target Das zu suchende Substring
+     * @return true, wenn das Ziel-Substring im Quell-String enthalten ist (ggf. ohne Beachtung der Groß-/Kleinschreibung), sonst false
+     */
     private boolean containsIgnoreCase(final String source, final String target) {
         if (target == null || target.isEmpty()) {
             return true;
