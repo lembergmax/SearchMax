@@ -119,7 +119,7 @@ public final class SearchView extends JFrame {
         this.drivePanel = new DrivePanel(this);
         this.topPanel = new TopPanel(this);
         this.centerPanel = new CenterPanel(this);
-        this.bottomPanel = new BottomPanel();
+        this.bottomPanel = new BottomPanel(this);
         this.statusUpdater = new StatusUpdater(this);
 
         initUI();
