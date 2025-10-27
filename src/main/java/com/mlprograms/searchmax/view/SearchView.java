@@ -103,6 +103,7 @@ public final class SearchView extends JFrame {
     private final Map<String, Boolean> knownContentExcludesCase = new LinkedHashMap<>();
     private boolean knownContentIncludesAllMode = false;
     private boolean useAllCores = false;
+    private com.mlprograms.searchmax.ExtractionMode extractionMode = com.mlprograms.searchmax.ExtractionMode.POI_THEN_TIKA;
 
     /**
      * Konstruktor für die SearchView.
@@ -248,6 +249,26 @@ public final class SearchView extends JFrame {
         } catch (Exception ex) {
             log.warn("Fehler beim Öffnen des Log-Viewers", ex);
             JOptionPane.showMessageDialog(this, "Fehler beim Öffnen des Log-Viewers: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    public void onShowSettings() {
+        try {
+            ExtractionSettingsDialog dlg = new ExtractionSettingsDialog(this, extractionMode);
+            dlg.setVisible(true);
+            com.mlprograms.searchmax.ExtractionMode sel = dlg.getSelected();
+            if (sel != null) {
+                extractionMode = sel;
+                // propagate to service
+                try {
+                    controller.setExtractionMode(extractionMode);
+                } catch (Exception e) {
+                    log.warn("Fehler beim Setzen des ExtractionMode", e);
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Fehler beim Öffnen der Settings", ex);
+            JOptionPane.showMessageDialog(this, "Fehler beim Öffnen der Settings: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -450,6 +471,7 @@ public final class SearchView extends JFrame {
             properties.put("includesMode", knownIncludesAllMode ? "ALL" : "ANY");
             properties.put("contentIncludesMode", knownContentIncludesAllMode ? "ALL" : "ANY");
             properties.put("useAllCores", Boolean.toString(useAllCores));
+            properties.put("extractionMode", extractionMode == null ? "POI_THEN_TIKA" : extractionMode.name());
 
             final File file = settingsFile.toFile();
             try (final FileOutputStream fileOutputStream = new FileOutputStream(file)) {
@@ -572,6 +594,10 @@ public final class SearchView extends JFrame {
             useAllCores = "true".equalsIgnoreCase(useAll);
             bottomPanel.getPerformanceModeCheck().setSelected(useAllCores);
             controller.setUseAllCores(useAllCores);
+
+            String extractionModeString = properties.getProperty("extractionMode", "POI_THEN_TIKA").trim();
+            extractionMode = com.mlprograms.searchmax.ExtractionMode.valueOf(extractionModeString);
+            controller.setExtractionMode(extractionMode);
         } catch (final Exception exception) {
             log.warn("Fehler beim Laden der Filtereinstellungen", exception);
         }

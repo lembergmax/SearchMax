@@ -128,4 +128,15 @@ public class SearchController implements SearchEventListener {
         }
         service.setUseAllCores(useAll);
     }
+
+    public void setExtractionMode(com.mlprograms.searchmax.ExtractionMode mode) {
+        try {
+            java.lang.reflect.Method m = service.getClass().getMethod("setExtractionMode", com.mlprograms.searchmax.ExtractionMode.class);
+            m.invoke(service, mode);
+        } catch (NoSuchMethodException nsme) {
+            // best-effort: ignore if method not found
+        } catch (Exception e) {
+            // ignore other reflection exceptions
+        }
+    }
 }
