@@ -5,8 +5,6 @@ package com.mlprograms.searchmax.view;
  */
 public final class GuiConstants {
 
-    // TODO: Schreibe mir eine ausführliche README.md Datei in Englisch über dieses Projekt. Dabei soll nicht von dem Code, sondern alle Funktionen und Features gezeigt und dargestellt werden. Füge außerdem Platzhalter für Screenshots von der GUI ein, wo ich dann das entsprechende Bild einfügen kann.
-
     public static final String TITLE_SEARCHMAX = "SearchMax";
 
     // DrivePanel
