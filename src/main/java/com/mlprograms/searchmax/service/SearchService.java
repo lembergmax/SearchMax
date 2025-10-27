@@ -2,6 +2,7 @@ package com.mlprograms.searchmax.service;
 
 import com.mlprograms.searchmax.DirectoryTask;
 import com.mlprograms.searchmax.SearchHandle;
+import com.mlprograms.searchmax.ExtractionMode;
 import com.mlprograms.searchmax.view.GuiConstants;
 import lombok.extern.slf4j.Slf4j;
 
@@ -19,6 +20,7 @@ public final class SearchService {
 
     private volatile ForkJoinPool pool;
     private final ConcurrentMap<String, SearchHandle> searches = new ConcurrentHashMap<>();
+    private volatile ExtractionMode extractionMode = ExtractionMode.POI_THEN_TIKA;
 
     public SearchService() {
         this.pool = new ForkJoinPool(1);
@@ -276,7 +278,7 @@ public final class SearchService {
         // Emitter, der Ergebnisse über safeSendMatch an den Listener weiterreicht
         java.util.function.Consumer<String> emitter = data -> safeSendMatch(listener, data);
 
-        final DirectoryTask task = new DirectoryTask(rootPath, handle.getResults(), handle.getMatchCount(), queryText, handle.getStartNano(), emitter, handle.getCancelled(), caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+        final DirectoryTask task = new DirectoryTask(rootPath, handle.getResults(), handle.getMatchCount(), queryText, handle.getStartNano(), emitter, handle.getCancelled(), caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, extractionMode);
 
         // Submit in den konfigurierten ForkJoinPool
         final ForkJoinTask<?> fjt = pool.submit((ForkJoinTask<?>) task);

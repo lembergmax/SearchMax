@@ -13,11 +13,13 @@ import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.extractor.ExtractorFactory;
 import org.apache.poi.extractor.POITextExtractor;
+
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -132,8 +134,10 @@ public final class DirectoryTask extends RecursiveAction {
     private final List<String> contentExcludeFilters;
     private final Map<String, Boolean> contentExcludeCaseMap;
     private final boolean contentIncludeAllMode;
+    // Extraction mode (POI only, Tika only, or POI then Tika fallback)
+    private final ExtractionMode extractionMode;
 
-    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode, final List<String> contentIncludeFilters, final Map<String, Boolean> contentIncludeCaseMap, final List<String> contentExcludeFilters, final Map<String, Boolean> contentExcludeCaseMap, final boolean contentIncludeAllMode) {
+    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode, final List<String> contentIncludeFilters, final Map<String, Boolean> contentIncludeCaseMap, final List<String> contentExcludeFilters, final Map<String, Boolean> contentExcludeCaseMap, final boolean contentIncludeAllMode, final ExtractionMode extractionMode) {
         this.directoryPath = directoryPath;
         this.result = (result == null) ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -157,6 +161,7 @@ public final class DirectoryTask extends RecursiveAction {
         this.contentExcludeFilters = (contentExcludeFilters == null || contentExcludeFilters.isEmpty()) ? null : new ArrayList<>(contentExcludeFilters);
         this.contentExcludeCaseMap = (contentExcludeCaseMap == null || contentExcludeCaseMap.isEmpty()) ? null : new HashMap<>(contentExcludeCaseMap);
         this.contentIncludeAllMode = contentIncludeAllMode;
+        this.extractionMode = extractionMode == null ? ExtractionMode.POI_THEN_TIKA : extractionMode;
     }
 
     /**
@@ -222,7 +227,7 @@ public final class DirectoryTask extends RecursiveAction {
      * @return Neuer DirectoryTask für das Unterverzeichnis
      */
     private DirectoryTask createSubtask(Path subDir) {
-        return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode);
+        return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode, extractionMode);
     }
 
     /**
@@ -508,250 +513,149 @@ public final class DirectoryTask extends RecursiveAction {
         List<FilterEntity> filterList = buildFilterEntities(filters, caseMap);
         if (filterList.isEmpty()) return false;
 
-        try (POITextExtractor extractor = ExtractorFactory.createExtractor(filePath.toFile())) {
-            String text = extractor.getText();
-            if (text == null || text.isEmpty()) return false;
-
-            boolean[] matched = new boolean[filterList.size()];
-            final int maxPatternLen = filterList.stream().mapToInt(fe -> fe.patternKey.length()).max().orElse(0);
-            final int windowSize = Math.max(8 * 1024, maxPatternLen * 2);
-
-            int pos = 0;
-            while (pos < text.length()) {
-                if (isCancelledOrInvalid()) return false;
-                int end = Math.min(text.length(), pos + windowSize);
-                String window = text.substring(pos, end);
-                StringBuilder sb = new StringBuilder(window);
-                updateMatchedFilters(sb, filterList, matched);
-
-                if (!requireAll && anyMatched(matched)) return true;
-                pos += Math.max(1, windowSize - maxPatternLen);
+        // Decide behavior based on extractionMode
+        switch (extractionMode) {
+            case TIKA_ONLY: {
+                try {
+                    String text = extractTextWithTika(filePath);
+                    return searchUsingTextString(text, filterList, requireAll);
+                } catch (Exception e) {
+                    log.debug("Tika extraction failed for {}: {}", filePath, e.getMessage());
+                    return false;
+                }
             }
-
-            return requireAll ? allMatched(matched) : anyMatched(matched);
-
-        } catch (Exception e) {
-            log.debug("Office extraction failed for {}: {}. Falling back to Apache Tika.", filePath, e.getMessage());
-            // Fallback: use Apache Tika for extraction
-            try {
-                String text = extractTextWithTika(filePath);
-                if (text == null || text.isEmpty()) return false;
-
-                boolean[] matched = new boolean[filterList.size()];
-                final int maxPatternLen = filterList.stream().mapToInt(fe -> fe.patternKey.length()).max().orElse(0);
-                final int windowSize = Math.max(8 * 1024, maxPatternLen * 2);
-
-                int pos = 0;
-                while (pos < text.length()) {
-                    if (isCancelledOrInvalid()) return false;
-                    int end = Math.min(text.length(), pos + windowSize);
-                    String window = text.substring(pos, end);
-                    StringBuilder sb = new StringBuilder(window);
-                    updateMatchedFilters(sb, filterList, matched);
-
-                    if (!requireAll && anyMatched(matched)) return true;
-                    pos += Math.max(1, windowSize - maxPatternLen);
+            case POI_ONLY: {
+                try (POITextExtractor extractor = ExtractorFactory.createExtractor(filePath.toFile())) {
+                    String text = extractor.getText();
+                    return searchUsingTextString(text, filterList, requireAll);
+                } catch (Exception e) {
+                    log.debug("POI extraction failed for {}: {}", filePath, e.getMessage());
+                    return false;
+                }
+            }
+            case POI_THEN_TIKA:
+            default: {
+                // Try POI first
+                try (POITextExtractor extractor = ExtractorFactory.createExtractor(filePath.toFile())) {
+                    String text = extractor.getText();
+                    if (text != null && !text.isEmpty()) {
+                        if (searchUsingTextString(text, filterList, requireAll)) return true;
+                    }
+                } catch (Exception e) {
+                    log.debug("Office extraction with POI failed for {}: {}. Falling back to Apache Tika.", filePath, e.getMessage());
                 }
 
-                return requireAll ? allMatched(matched) : anyMatched(matched);
-            } catch (Exception ex) {
-                log.debug("Tika extraction failed for {}: {}", filePath, ex.getMessage());
-                return false;
+                // Fallback to Tika
+                try {
+                    String text = extractTextWithTika(filePath);
+                    return searchUsingTextString(text, filterList, requireAll);
+                } catch (Exception ex) {
+                    log.debug("Tika extraction failed for {}: {}", filePath, ex.getMessage());
+                    return false;
+                }
             }
         }
     }
 
-    // Extract text using Apache Tika
-    private String extractTextWithTika(final Path filePath) throws Exception {
-        org.apache.tika.parser.AutoDetectParser parser = new org.apache.tika.parser.AutoDetectParser();
-        org.apache.tika.metadata.Metadata metadata = new org.apache.tika.metadata.Metadata();
-        try (java.io.InputStream is = java.nio.file.Files.newInputStream(filePath)) {
-            org.apache.tika.sax.BodyContentHandler handler = new org.apache.tika.sax.BodyContentHandler(-1);
-            org.apache.tika.parser.ParseContext context = new org.apache.tika.parser.ParseContext();
-            parser.parse(is, handler, metadata, context);
-            return handler.toString();
+    // Helper: search over a large text string using the existing windowed approach
+    private boolean searchUsingTextString(final String text, final List<FilterEntity> filterList, final boolean requireAll) {
+        if (text == null || text.isEmpty()) return false;
+        boolean[] matched = new boolean[filterList.size()];
+        final int maxPatternLen = filterList.stream().mapToInt(fe -> fe.patternKey.length()).max().orElse(0);
+        final int windowSize = Math.max(8 * 1024, maxPatternLen * 2);
+
+        int pos = 0;
+        while (pos < text.length()) {
+            if (isCancelledOrInvalid()) return false;
+            int end = Math.min(text.length(), pos + windowSize);
+            String window = text.substring(pos, end);
+            StringBuilder sb = new StringBuilder(window);
+            updateMatchedFilters(sb, filterList, matched);
+
+            if (!requireAll && anyMatched(matched)) return true;
+            // advance by windowSize - maxPatternLen to keep overlap for matches across boundaries
+            pos += Math.max(1, windowSize - maxPatternLen);
         }
+
+        return requireAll ? allMatched(matched) : anyMatched(matched);
     }
 
-    /**
-     * Baut eine Liste von FilterEntity-Objekten aus den gegebenen Filter-Strings und der Case-Sensitivity-Map.
-     *
-     * @param filters Liste der Filter-Strings
-     * @param caseMap Map, die für jeden Filter angibt, ob Groß-/Kleinschreibung beachtet werden soll
-     * @return Liste von FilterEntity-Objekten
-     */
     private List<FilterEntity> buildFilterEntities(final List<String> filters, final Map<String, Boolean> caseMap) {
         List<FilterEntity> filterList = new ArrayList<>();
         for (String filter : filters) {
-            if (filter == null) {
-                continue;
-            }
-
+            if (filter == null) continue;
             String trimmedFilter = filter.trim();
-            if (trimmedFilter.isEmpty()) {
-                continue;
-            }
-
+            if (trimmedFilter.isEmpty()) continue;
             final FilterEntity filterEntity = new FilterEntity();
             filterEntity.pattern = trimmedFilter;
             filterEntity.caseSensitive = caseMap != null && Boolean.TRUE.equals(caseMap.get(trimmedFilter));
-            filterEntity.patternKey = filterEntity.caseSensitive
-                    ? trimmedFilter
-                    : trimmedFilter.toLowerCase(Locale.ROOT);
+            filterEntity.patternKey = filterEntity.caseSensitive ? trimmedFilter : trimmedFilter.toLowerCase(Locale.ROOT);
             filterList.add(filterEntity);
         }
         return filterList;
     }
 
-    /**
-     * Aktualisiert das matched-Array, indem geprüft wird, ob die Filter im aktuellen Fenster (window) gefunden werden.
-     *
-     * @param window     StringBuilder mit aktuellem Fenster des Datei-Inhalts
-     * @param filterList Liste der zu prüfenden FilterEntity-Objekte
-     * @param matched    Array, das für jeden Filter angibt, ob er bereits gefunden wurde
-     */
     private void updateMatchedFilters(final StringBuilder window, final List<FilterEntity> filterList, final boolean[] matched) {
         String lowerWindow = null;
         String windowStr = null;
-
         for (int i = 0; i < filterList.size(); i++) {
-            if (matched[i]) {
-                continue;
-            }
-
-            final FilterEntity filterEntity = filterList.get(i);
-            if (filterEntity.caseSensitive) {
-                if (windowStr == null) {
-                    windowStr = window.toString();
-                }
-                if (windowStr.contains(filterEntity.patternKey)) {
-                    matched[i] = true;
-                }
+            if (matched[i]) continue;
+            final FilterEntity fe = filterList.get(i);
+            if (fe.caseSensitive) {
+                if (windowStr == null) windowStr = window.toString();
+                if (windowStr.contains(fe.patternKey)) matched[i] = true;
             } else {
-                if (lowerWindow == null) {
-                    lowerWindow = window.toString().toLowerCase(Locale.ROOT);
-                }
-                if (lowerWindow.contains(filterEntity.patternKey)) {
-                    matched[i] = true;
-                }
+                if (lowerWindow == null) lowerWindow = window.toString().toLowerCase(Locale.ROOT);
+                if (lowerWindow.contains(fe.patternKey)) matched[i] = true;
             }
         }
     }
 
-    /**
-     * Kürzt das Fenster (window) auf die maximale Länge, um Speicher zu sparen.
-     *
-     * @param window    StringBuilder mit aktuellem Fenster des Datei-Inhalts
-     * @param maxLength Maximale Länge des Fensters
-     */
     private void trimWindow(final StringBuilder window, final int maxLength) {
         if (window.length() > maxLength) {
             window.delete(0, window.length() - maxLength);
         }
     }
 
-    /**
-     * Prüft, ob mindestens ein Filter im matched-Array erfüllt ist.
-     *
-     * @param matched Array mit Treffer-Status für jeden Filter
-     * @return true, wenn mindestens ein Filter erfüllt ist, sonst false
-     */
     private boolean anyMatched(final boolean[] matched) {
-        for (boolean match : matched) {
-            if (match) {
-                return true;
-            }
-        }
+        for (boolean m : matched) if (m) return true;
         return false;
     }
 
-    /**
-     * Prüft, ob alle Filter im matched-Array erfüllt sind.
-     *
-     * @param matched Array mit Treffer-Status für jeden Filter
-     * @return true, wenn alle Filter erfüllt sind, sonst false
-     */
     private boolean allMatched(final boolean[] matched) {
-        for (boolean match : matched) {
-            if (!match) {
-                return false;
-            }
-        }
+        for (boolean m : matched) if (!m) return false;
         return true;
     }
 
-    /**
-     * Prüft, ob der Dateiname die Query enthält.
-     *
-     * @param fileName Dateiname
-     * @return true, wenn Query enthalten ist oder leer, sonst false
-     */
     private boolean matchesQuery(final String fileName) {
         return queryLength == 0 || containsIgnoreCase(fileName, query);
     }
 
-    /**
-     * Prüft, ob der Dateiname einen der Include-Filter erfüllt.
-     *
-     * @param fileName Dateiname
-     * @return true, wenn kein Filter gesetzt oder mindestens ein Filter passt
-     */
     private boolean matchesIncludeFilters(final String fileName) {
-        if (includeFilters == null || includeFilters.isEmpty()) {
-            return true;
-        }
+        if (includeFilters == null || includeFilters.isEmpty()) return true;
         String base = stripExtension(fileName);
         return matchesFilters(base, includeFilters, includeCaseMap, includeAllMode);
     }
 
-    /**
-     * Prüft, ob der Dateiname einen der Exclude-Filter erfüllt.
-     *
-     * @param fileName Dateiname
-     * @return true, wenn mindestens ein Exclude-Filter passt, sonst false
-     */
     private boolean matchesExcludeFilters(final String fileName) {
-        if (excludeFilters == null || excludeFilters.isEmpty()) {
-            return false;
-        }
+        if (excludeFilters == null || excludeFilters.isEmpty()) return false;
         String base = stripExtension(fileName);
         return matchesFilters(base, excludeFilters, excludeCaseMap, false);
     }
 
-    /**
-     * Prüft, ob der Dateiname mit einem der Filter übereinstimmt.
-     *
-     * @param nameToCheck Zu prüfender Name (ohne Pfad)
-     * @param filters     Liste der Filter
-     * @param caseMap     Map für Case-Sensitivity je Filter
-     * @param requireAll  Ob alle Filter erfüllt sein müssen
-     * @return true, wenn mindestens ein Filter passt, sonst false
-     */
     private boolean matchesFilters(final String nameToCheck, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
-        if (filters == null || filters.isEmpty()) {
-            return false;
-        }
-
+        if (filters == null || filters.isEmpty()) return false;
         if (requireAll) {
             for (String filter : filters) {
-                if (filter == null || filter.isEmpty()) {
-                    continue;
-                }
-
+                if (filter == null || filter.isEmpty()) continue;
                 boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
                 boolean matched = caseSensitiveFilter ? nameToCheck.contains(filter) : nameToCheck.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
-                if (!matched) {
-                    return false;
-                }
+                if (!matched) return false;
             }
-
             return true;
         } else {
             for (String filter : filters) {
-                if (filter == null || filter.isEmpty()) {
-                    continue;
-                }
-
+                if (filter == null || filter.isEmpty()) continue;
                 boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
                 if (caseSensitiveFilter) {
                     if (nameToCheck.contains(filter)) return true;
@@ -763,12 +667,6 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
-    /**
-     * Entfernt die Dateiendung aus dem Dateinamen, falls vorhanden.
-     *
-     * @param fileName Dateiname
-     * @return Dateiname ohne Endung
-     */
     private String stripExtension(String fileName) {
         if (fileName == null) return "";
         int index = fileName.lastIndexOf('.');
@@ -778,14 +676,6 @@ public final class DirectoryTask extends RecursiveAction {
         return fileName;
     }
 
-    /**
-     * Prüft, ob der Quell-String das Ziel-Substring enthält, unter Berücksichtigung der Groß-/Kleinschreibung
-     * gemäß der Einstellung der Instanz (caseSensitive).
-     *
-     * @param source Der zu durchsuchende Quell-String
-     * @param target Das zu suchende Substring
-     * @return true, wenn das Ziel-Substring im Quell-String enthalten ist (ggf. ohne Beachtung der Groß-/Kleinschreibung), sonst false
-     */
     private boolean containsIgnoreCase(final String source, final String target) {
         if (target == null || target.isEmpty()) {
             return true;
@@ -805,6 +695,17 @@ public final class DirectoryTask extends RecursiveAction {
         }
 
         return false;
+    }
+
+    private String extractTextWithTika(final Path filePath) throws Exception {
+        org.apache.tika.parser.AutoDetectParser parser = new org.apache.tika.parser.AutoDetectParser();
+        org.apache.tika.metadata.Metadata metadata = new org.apache.tika.metadata.Metadata();
+        try (java.io.InputStream is = java.nio.file.Files.newInputStream(filePath)) {
+            org.apache.tika.sax.BodyContentHandler handler = new org.apache.tika.sax.BodyContentHandler(-1);
+            org.apache.tika.parser.ParseContext context = new org.apache.tika.parser.ParseContext();
+            parser.parse(is, handler, metadata, context);
+            return handler.toString();
+        }
     }
 
 }
