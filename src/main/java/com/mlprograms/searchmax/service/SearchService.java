@@ -32,7 +32,7 @@ public final class SearchService {
         // was zu nativen Speicher-Allokationsfehlern führen kann.
         final int available = Math.max(1, Runtime.getRuntime().availableProcessors());
         final int MAX_PARALLEL = 4; // konservativer Grenzwert für typische Desktop-Systeme
-        int desired = useAll ? Math.max(1, Math.min(available, MAX_PARALLEL)) : 1;
+        int desired = useAll ? Math.max(1, Math.min(available, MAX_PARALLEL)) : available / 3;
         if (pool != null && pool.getParallelism() == desired) return;
         // replace pool for subsequent searches
         ForkJoinPool newPool = new ForkJoinPool(desired);
