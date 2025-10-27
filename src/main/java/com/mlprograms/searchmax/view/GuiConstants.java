@@ -30,7 +30,7 @@ public final class GuiConstants {
 
     // BottomPanel / Status
     public static final String STATUS_READY = "Ready";
-    public static final String PERFORMANCE_MODE = "Performance mode (use all cores)";
+    public static final String PERFORMANCE_MODE = "Performance mode (uses all CPU cores)";
     public static final String STATUS_LABEL_PREFIX = "Status: ";
     public static final String SEARCH_RUNNING_TEXT = "Searching";
 
@@ -71,9 +71,9 @@ public final class GuiConstants {
     // Extraction settings dialog strings
     public static final String TITLE_EXTRACTION_SETTINGS = "Text extraction settings";
     public static final String SECTION_EXTRACTION = "Extraction";
-    public static final String RADIO_POI_ONLY = "POI only (fast for Office)";
-    public static final String RADIO_TIKA_ONLY = "Tika only (broad fallback)";
-    public static final String RADIO_POI_THEN_TIKA = "POI then Tika (recommended)";
+    public static final String RADIO_POI_ONLY = "POI only (fast for Office files)";
+    public static final String RADIO_TIKA_ONLY = "Tika only (broad support)";
+    public static final String RADIO_POI_THEN_TIKA = "POI, then Tika (recommended)";
 
     // Log / Error messages
     public static final String MSG_INMEMORY_APPENDER_NOT_FOUND = "InMemory Log Appender not found. Please check the log4j2 configuration.";

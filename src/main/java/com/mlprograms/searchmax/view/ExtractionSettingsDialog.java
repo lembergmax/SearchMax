@@ -87,23 +87,8 @@ public class ExtractionSettingsDialog extends JDialog {
         sectionsPanel.add(Box.createVerticalStrut(8));
     }
 
-    // Public method to add a titled section so callers can extend the dialog
-    public void addSection(String title, JComponent content) {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), title, TitledBorder.LEFT, TitledBorder.TOP));
-        panel.add(content, BorderLayout.CENTER);
-        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        sectionsPanel.add(panel);
-        sectionsPanel.add(Box.createVerticalStrut(8));
-        // refresh dialog size if already visible
-        if (isVisible()) {
-            revalidate();
-            repaint();
-            pack();
-        }
-    }
-
     public ExtractionMode getSelected() {
         return selected;
     }
+
 }
