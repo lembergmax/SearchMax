@@ -4,7 +4,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
@@ -261,7 +260,6 @@ public final class DirectoryTask extends RecursiveAction {
         if (!matchesExtensions(fileName)) {
             return;
         }
-        // Neue Prüfung: Inhalt-Filter
         if (!matchesContentFilters(filePath)) {
             return;
         }
@@ -282,6 +280,16 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
+    /**
+     * Prüft, ob der Dateiname mit einer erlaubten oder ausgeschlossenen Dateiendung übereinstimmt.
+     * <p>
+     * - Gibt false zurück, wenn die Dateiendung in der Liste der ausgeschlossenen Endungen enthalten ist.
+     * - Gibt true zurück, wenn die Dateiendung in der Liste der erlaubten Endungen enthalten ist.
+     * - Gibt true zurück, wenn keine Listen gesetzt sind oder keine Einschränkung zutrifft.
+     *
+     * @param fileName Der zu prüfende Dateiname
+     * @return true, wenn die Dateiendung erlaubt ist, sonst false
+     */
     private boolean matchesExtensions(final String fileName) {
         final String lower = fileName.toLowerCase(Locale.ROOT);
 
@@ -321,18 +329,23 @@ public final class DirectoryTask extends RecursiveAction {
         return String.format("[%d.%02ds] %s", whole, cents, pathString);
     }
 
+    /**
+     * Prüft, ob der Inhalt einer Datei die definierten Content-Filter (Include/Exclude) erfüllt.
+     * <p>
+     * - Gibt true zurück, wenn keine Content-Filter gesetzt sind.
+     * - Gibt false zurück, wenn ein Exclude-Filter zutrifft.
+     * - Gibt true/false je nach Ergebnis der Include-Filter-Prüfung zurück.
+     * - Bei Fehlern (z.B. Datei nicht lesbar) wird true zurückgegeben, um die Suche nicht zu blockieren.
+     *
+     * @param filePath Pfad zur zu prüfenden Datei
+     * @return true, wenn die Datei die Content-Filter erfüllt oder keine Filter gesetzt sind, sonst false
+     */
     private boolean matchesContentFilters(final Path filePath) {
         if ((contentIncludeFilters == null || contentIncludeFilters.isEmpty()) && (contentExcludeFilters == null || contentExcludeFilters.isEmpty())) {
             return true;
         }
 
         try {
-            // TODO: irgendwie anders einlesen damit alle dateien eingelesen werden
-            long size = Files.size(filePath);
-            if (size > 50 * 1024 * 1024) {
-                return true;
-            }
-
             if (contentExcludeFilters != null && !contentExcludeFilters.isEmpty()) {
                 if (matchesContentStreamFilters(filePath, contentExcludeFilters, contentExcludeCaseMap, false)) {
                     return false;
@@ -349,19 +362,74 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
+    /**
+     * Repräsentiert einen Filter mit zugehörigem Pattern, Case-Sensitivity und dem Schlüssel für den Vergleich.
+     */
     private static class FilterEntity {
         String pattern;
         boolean caseSensitive;
         String patternKey;
     }
 
+    /**
+     * Prüft, ob der Inhalt der Datei die angegebenen Filter erfüllt.
+     * Liest die Datei blockweise und sucht nach den Filter-Strings unter Berücksichtigung der Groß-/Kleinschreibung.
+     *
+     * @param filePath   Pfad zur zu prüfenden Datei
+     * @param filters    Liste der Filter-Strings
+     * @param caseMap    Map, die für jeden Filter angibt, ob Groß-/Kleinschreibung beachtet werden soll
+     * @param requireAll true, wenn alle Filter erfüllt sein müssen; false, wenn einer genügt
+     * @return true, wenn die Filterbedingungen erfüllt sind, sonst false
+     */
     private boolean matchesContentStreamFilters(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
         if (filters == null || filters.isEmpty()) {
             return false;
         }
 
-        List<FilterEntity> filterList = new java.util.ArrayList<>();
-        int maxLength = 0;
+        List<FilterEntity> filterList = buildFilterEntities(filters, caseMap);
+        if (filterList.isEmpty()) {
+            return false;
+        }
+
+        final int maxLength = filterList.stream().mapToInt(filterEntity -> filterEntity.patternKey.length()).max().orElse(0);
+        final int bufferSize = 8 * 1024;
+        boolean[] matched = new boolean[filterList.size()];
+
+        try (final java.io.Reader reader = java.nio.file.Files.newBufferedReader(filePath)) {
+            final char[] buffer = new char[bufferSize];
+            int read;
+            final StringBuilder window = new StringBuilder(Math.max(bufferSize, maxLength * 2));
+
+            while ((read = reader.read(buffer)) != -1) {
+                if (isCancelledOrInvalid()) {
+                    return false;
+                }
+
+                window.append(buffer, 0, read);
+                updateMatchedFilters(window, filterList, matched);
+
+                if (!requireAll && anyMatched(matched)) {
+                    return true;
+                }
+
+                trimWindow(window, maxLength);
+            }
+
+            return requireAll ? allMatched(matched) : anyMatched(matched);
+        } catch (final Exception exception) {
+            return false;
+        }
+    }
+
+    /**
+     * Baut eine Liste von FilterEntity-Objekten aus den gegebenen Filter-Strings und der Case-Sensitivity-Map.
+     *
+     * @param filters Liste der Filter-Strings
+     * @param caseMap Map, die für jeden Filter angibt, ob Groß-/Kleinschreibung beachtet werden soll
+     * @return Liste von FilterEntity-Objekten
+     */
+    private List<FilterEntity> buildFilterEntities(final List<String> filters, final Map<String, Boolean> caseMap) {
+        List<FilterEntity> filterList = new ArrayList<>();
         for (String filter : filters) {
             if (filter == null) {
                 continue;
@@ -372,85 +440,92 @@ public final class DirectoryTask extends RecursiveAction {
                 continue;
             }
 
-            FilterEntity filterEntity = new FilterEntity();
+            final FilterEntity filterEntity = new FilterEntity();
             filterEntity.pattern = trimmedFilter;
             filterEntity.caseSensitive = caseMap != null && Boolean.TRUE.equals(caseMap.get(trimmedFilter));
-            filterEntity.patternKey = filterEntity.caseSensitive ? trimmedFilter : trimmedFilter.toLowerCase(java.util.Locale.ROOT);
+            filterEntity.patternKey = filterEntity.caseSensitive
+                    ? trimmedFilter
+                    : trimmedFilter.toLowerCase(Locale.ROOT);
             filterList.add(filterEntity);
-
-            if (filterEntity.patternKey.length() > maxLength) {
-                maxLength = filterEntity.patternKey.length();
-            }
         }
+        return filterList;
+    }
 
-        if (filterList.isEmpty()) {
-            return false;
-        }
+    /**
+     * Aktualisiert das matched-Array, indem geprüft wird, ob die Filter im aktuellen Fenster (window) gefunden werden.
+     *
+     * @param window     StringBuilder mit aktuellem Fenster des Datei-Inhalts
+     * @param filterList Liste der zu prüfenden FilterEntity-Objekte
+     * @param matched    Array, das für jeden Filter angibt, ob er bereits gefunden wurde
+     */
+    private void updateMatchedFilters(final StringBuilder window, final List<FilterEntity> filterList, final boolean[] matched) {
+        String lowerWindow = null;
+        String windowStr = null;
 
-        boolean[] matched = new boolean[filterList.size()];
-        try (final BufferedReader reader = Files.newBufferedReader(filePath)) {
-            String line;
-            String tail = "";
-
-            while ((line = reader.readLine()) != null) {
-                if (isCancelledOrInvalid()) {
-                    return false;
-                }
-
-                String chunk = tail + "\n" + line;
-                String lowerChunk = null;
-
-                for (int i = 0; i < filterList.size(); i++) {
-                    if (matched[i]) {
-                        continue;
-                    }
-
-                    FilterEntity filterEntity = filterList.get(i);
-                    boolean found;
-                    if (filterEntity.caseSensitive) {
-                        found = chunk.contains(filterEntity.patternKey);
-                    } else {
-                        if (lowerChunk == null) lowerChunk = chunk.toLowerCase(Locale.ROOT);
-                        found = lowerChunk.contains(filterEntity.patternKey);
-                    }
-                    if (found) {
-                        matched[i] = true;
-                    }
-                }
-
-                if (!requireAll) {
-                    for (boolean bool : matched) {
-                        if (bool) return true;
-                    }
-                }
-
-                if (chunk.length() > maxLength) {
-                    tail = chunk.substring(chunk.length() - /*TODO:*/ Math.min(maxLength, maxLength));
-                } else {
-                    tail = chunk;
-                }
+        for (int i = 0; i < filterList.size(); i++) {
+            if (matched[i]) {
+                continue;
             }
 
-            if (requireAll) {
-                for (boolean match : matched) {
-                    if (!match) {
-                        return false;
-                    }
+            final FilterEntity filterEntity = filterList.get(i);
+            if (filterEntity.caseSensitive) {
+                if (windowStr == null) {
+                    windowStr = window.toString();
                 }
-
-                return true;
+                if (windowStr.contains(filterEntity.patternKey)) {
+                    matched[i] = true;
+                }
             } else {
-                for (boolean match : matched) {
-                    if (match) {
-                        return true;
-                    }
+                if (lowerWindow == null) {
+                    lowerWindow = window.toString().toLowerCase(Locale.ROOT);
                 }
+                if (lowerWindow.contains(filterEntity.patternKey)) {
+                    matched[i] = true;
+                }
+            }
+        }
+    }
 
+    /**
+     * Kürzt das Fenster (window) auf die maximale Länge, um Speicher zu sparen.
+     *
+     * @param window    StringBuilder mit aktuellem Fenster des Datei-Inhalts
+     * @param maxLength Maximale Länge des Fensters
+     */
+    private void trimWindow(final StringBuilder window, final int maxLength) {
+        if (window.length() > maxLength) {
+            window.delete(0, window.length() - maxLength);
+        }
+    }
+
+    /**
+     * Prüft, ob mindestens ein Filter im matched-Array erfüllt ist.
+     *
+     * @param matched Array mit Treffer-Status für jeden Filter
+     * @return true, wenn mindestens ein Filter erfüllt ist, sonst false
+     */
+    private boolean anyMatched(final boolean[] matched) {
+        for (boolean match : matched) {
+            if (match) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Prüft, ob alle Filter im matched-Array erfüllt sind.
+     *
+     * @param matched Array mit Treffer-Status für jeden Filter
+     * @return true, wenn alle Filter erfüllt sind, sonst false
+     */
+    private boolean allMatched(final boolean[] matched) {
+        for (boolean match : matched) {
+            if (!match) {
                 return false;
             }
-        } catch (final Exception exception) {
-            return false;
         }
+        return true;
     }
 
     /**
