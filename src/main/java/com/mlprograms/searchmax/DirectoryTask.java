@@ -16,6 +16,8 @@ import java.util.function.Consumer;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.poi.extractor.ExtractorFactory;
+import org.apache.poi.extractor.POITextExtractor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -393,6 +395,11 @@ public final class DirectoryTask extends RecursiveAction {
         if (nameLower.endsWith(".pdf")) {
             return matchesPdfContent(filePath, filters, caseMap, requireAll);
         }
+
+        // Office- und OpenDocument-Formate: doc/docx/xls/xlsx/ppt/pptx/odt/ods/odp
+        if (nameLower.endsWith(".doc") || nameLower.endsWith(".docx") || nameLower.endsWith(".xls") || nameLower.endsWith(".xlsx") || nameLower.endsWith(".ppt") || nameLower.endsWith(".pptx") || nameLower.endsWith(".odt") || nameLower.endsWith(".ods") || nameLower.endsWith(".odp")) {
+            return searchOfficeFile(filePath, filters, caseMap, requireAll);
+        }
         if (filters == null || filters.isEmpty()) {
             return false;
         }
@@ -489,6 +496,43 @@ public final class DirectoryTask extends RecursiveAction {
             root.setLevel(prevRoot);
             fontLogger.setLevel(prevFont);
             parserLogger.setLevel(prevParser);
+        }
+    }
+
+    /**
+     * Extrahiert Text mit Apache POI (ExtractorFactory) und prüft die Filter.
+     * Die Methode ist robust gegenüber Extraktionsfehlern und gibt false zurück, wenn keine Textextraktion möglich ist.
+     */
+    private boolean searchOfficeFile(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
+        if (filters == null || filters.isEmpty()) return false;
+        List<FilterEntity> filterList = buildFilterEntities(filters, caseMap);
+        if (filterList.isEmpty()) return false;
+
+        try (POITextExtractor extractor = ExtractorFactory.createExtractor(filePath.toFile())) {
+            String text = extractor.getText();
+            if (text == null || text.isEmpty()) return false;
+
+            boolean[] matched = new boolean[filterList.size()];
+            final int maxPatternLen = filterList.stream().mapToInt(fe -> fe.patternKey.length()).max().orElse(0);
+            final int windowSize = Math.max(8 * 1024, maxPatternLen * 2);
+
+            int pos = 0;
+            while (pos < text.length()) {
+                if (isCancelledOrInvalid()) return false;
+                int end = Math.min(text.length(), pos + windowSize);
+                String window = text.substring(pos, end);
+                StringBuilder sb = new StringBuilder(window);
+                updateMatchedFilters(sb, filterList, matched);
+
+                if (!requireAll && anyMatched(matched)) return true;
+                pos += Math.max(1, windowSize - maxPatternLen);
+            }
+
+            return requireAll ? allMatched(matched) : anyMatched(matched);
+
+        } catch (Exception e) {
+            log.debug("Office extraction failed for {}: {}", filePath, e.getMessage());
+            return false;
         }
     }
 
