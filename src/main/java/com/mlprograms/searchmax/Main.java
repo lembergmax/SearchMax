@@ -6,7 +6,9 @@ import com.mlprograms.searchmax.service.SearchService;
 import com.mlprograms.searchmax.view.SearchView;
 
 import javax.swing.*;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class Main {
 
     public static void main(String[] args) {
@@ -14,7 +16,7 @@ public class Main {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (final Exception exception) {
-                System.err.println(exception.getMessage());
+                log.warn("Fehler beim Setzen des LookAndFeels", exception);
             }
 
             final SearchService searchService = new SearchService();

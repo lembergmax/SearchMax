@@ -22,10 +22,10 @@ public final class GuiConstants {
 
     // SearchView / JFileChooser / JOptionPane messages
     public static final String CHOOSER_SELECT_FOLDER = "Select folder";
-    public static final String MSG_ENTER_QUERY_OR_TYPE = "Please enter a search text or file type.";
+    public static final String MSG_ENTER_QUERY_OR_TYPE = "Please enter a search text or specify a filter.";
     public static final String MSG_MISSING_INPUT_TITLE = "Input missing";
     public static final String MSG_PLEASE_START_FOLDER = "Please specify a start folder or select a drive.";
-    public static final String MSG_PLEASE_QUERY_OR_TYPE_OR_FILTER = "Please enter a search text, file type, or at least one 'Include' filter.";
+    public static final String MSG_PLEASE_QUERY_OR_TYPE_OR_FILTER = "Please enter a search text, file type, or a filter.";
 
     // BottomPanel / Status
     public static final String STATUS_READY = "Ready";
