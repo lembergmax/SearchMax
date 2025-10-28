@@ -65,6 +65,22 @@ public final class GuiConstants {
     public static final String COLUMN_CASE_SENSITIVE = "Case sensitive";
     public static final String COLUMN_REMOVE = "Remove";
 
+    // Time range columns
+    public static final String COLUMN_START = "Start";
+    public static final String COLUMN_END = "End";
+    public static final String COLUMN_TIME_MODE = "Mode";
+
+    // Time panel strings
+    public static final String TIME_PANEL_TITLE = "Time range";
+    public static final String LABEL_FROM = "From";
+    public static final String LABEL_TO = "To";
+    public static final String INPUT_ADD_TIME_TITLE = "Add time range";
+    public static final String MSG_INVALID_TIME_RANGE = "Invalid time range";
+    public static final String LABEL_MODE = "Mode";
+    public static final String MODE_TIME = "Time";
+    public static final String MODE_DATE = "Date";
+    public static final String MODE_DATETIME = "Date & Time";
+
     // Extensions specific column
     public static final String EXT_COLUMN_EXTENSION = "Extension";
 
