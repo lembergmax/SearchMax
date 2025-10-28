@@ -92,16 +92,18 @@ public final class SearchView extends JFrame {
      */
     private final Map<String, Boolean> knownExtensionsDeny = new LinkedHashMap<>();
 
-    /**
-     * Gibt an, ob der Modus "Enthält alle" aktiv ist.
-     */
-    private boolean knownIncludesAllMode = false;
-    // Content filters
+    // Content (Dateiinhalt) filter state
     private final Map<String, Boolean> knownContentIncludes = new LinkedHashMap<>();
     private final Map<String, Boolean> knownContentExcludes = new LinkedHashMap<>();
     private final Map<String, Boolean> knownContentIncludesCase = new LinkedHashMap<>();
     private final Map<String, Boolean> knownContentExcludesCase = new LinkedHashMap<>();
+    private boolean knownIncludesAllMode = false;
     private boolean knownContentIncludesAllMode = false;
+
+    // Zeitfilter: bekannte Einträge (werden als TimeRangeTableModel.Entry gespeichert)
+    private java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> knownTimeIncludes = new java.util.ArrayList<>();
+    private java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> knownTimeExcludes = new java.util.ArrayList<>();
+    private boolean knownTimeIncludesAllMode = false;
     private boolean useAllCores = false;
     private com.mlprograms.searchmax.ExtractionMode extractionMode = com.mlprograms.searchmax.ExtractionMode.POI_THEN_TIKA;
 
@@ -316,7 +318,7 @@ public final class SearchView extends JFrame {
                 JOptionPane.showMessageDialog(this, GuiConstants.MSG_ENTER_QUERY_OR_TYPE, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            controller.startSearch("", query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, knownContentIncludesAllMode);
+            controller.startSearch("", query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, knownContentIncludesAllMode, knownTimeIncludes, knownTimeExcludes, knownTimeIncludesAllMode);
             return;
         }
 
@@ -329,7 +331,7 @@ public final class SearchView extends JFrame {
             return;
         }
 
-        controller.startSearch(folder.trim(), query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, knownContentIncludesAllMode);
+        controller.startSearch(folder.trim(), query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, knownContentIncludesAllMode, knownTimeIncludes, knownTimeExcludes, knownTimeIncludesAllMode);
     }
 
     /**
@@ -365,7 +367,7 @@ public final class SearchView extends JFrame {
      * Öffnet den Filter-Dialog und übernimmt ggf. die neuen Filtereinstellungen.
      */
     void onManageFilters() {
-        final FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase, knownIncludesAllMode, knownContentIncludes, knownContentExcludes, knownContentIncludesCase, knownContentExcludesCase, knownContentIncludesAllMode);
+        final FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase, knownIncludesAllMode, knownContentIncludes, knownContentExcludes, knownContentIncludesCase, knownContentExcludesCase, knownContentIncludesAllMode, knownTimeIncludes, knownTimeExcludes, knownTimeIncludesAllMode);
         filtersDialog.setVisible(true);
 
         if (filtersDialog.isConfirmed()) {
@@ -403,8 +405,20 @@ public final class SearchView extends JFrame {
             knownExtensionsDeny.clear();
             knownExtensionsDeny.putAll(extensionsDeny);
 
+            // Zeitfilter übernehmen (nur aktivierte Einträge)
+            knownTimeIncludes.clear();
+            for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry en : filtersDialog.getTimeIncludes()) {
+                if (en.enabled) knownTimeIncludes.add(en);
+            }
+            knownTimeExcludes.clear();
+            for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry en : filtersDialog.getTimeExcludes()) {
+                if (en.enabled) knownTimeExcludes.add(en);
+            }
+            knownTimeIncludesAllMode = filtersDialog.isTimeIncludeAllMode();
+
             knownIncludesAllMode = filtersDialog.isIncludeAllMode();
             knownContentIncludesAllMode = filtersDialog.isContentIncludeAllMode();
+            // timeIncludeAllMode ist oben schon gesetzt
 
             saveExtensionsToSettings();
         }
@@ -464,6 +478,10 @@ public final class SearchView extends JFrame {
             properties.put("contentExcludes", mapToString(knownContentExcludes));
             properties.put("contentIncludesCase", mapToString(knownContentIncludesCase));
             properties.put("contentExcludesCase", mapToString(knownContentExcludesCase));
+            // Zeitfilter speichern (enabled|startMillis|endMillis|MODE;...)
+            properties.put("timeIncludes", timeListToString(knownTimeIncludes));
+            properties.put("timeExcludes", timeListToString(knownTimeExcludes));
+            properties.put("timeIncludesMode", knownTimeIncludesAllMode ? "ALL" : "ANY");
 
             properties.put("startFolder", topPanel.getFolderField().getText() == null ? "" : topPanel.getFolderField().getText());
             properties.put("query", topPanel.getQueryField().getText() == null ? "" : topPanel.getQueryField().getText());
@@ -493,6 +511,24 @@ public final class SearchView extends JFrame {
         final StringBuilder stringBuilder = new StringBuilder();
         for (final Map.Entry<String, Boolean> entry : map.entrySet()) {
             stringBuilder.append(entry.getKey()).append("=").append(entry.getValue()).append(";");
+        }
+
+        return stringBuilder.toString();
+    }
+
+    /**
+     * Speichert eine Liste von TimeRangeTableModel.Entry in einen String zur Speicherung in Properties.
+     *
+     * @param list Die zu speichernde Liste
+     * @return String-Repräsentation der Liste
+     */
+    private String timeListToString(final List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> list) {
+        final StringBuilder stringBuilder = new StringBuilder();
+        for (final com.mlprograms.searchmax.model.TimeRangeTableModel.Entry entry : list) {
+            long start = entry.start == null ? -1L : entry.start.getTime();
+            long end = entry.end == null ? -1L : entry.end.getTime();
+            String mode = entry.mode == null ? com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.DATETIME.name() : entry.mode.name();
+            stringBuilder.append(entry.enabled).append("|").append(start).append("|").append(end).append("|").append(mode).append(";");
         }
 
         return stringBuilder.toString();
@@ -585,6 +621,14 @@ public final class SearchView extends JFrame {
                 knownContentExcludesCase.putAll(booleanMap);
             }
 
+            final String timeIncludes = properties.getProperty("timeIncludes", "").trim();
+            parseTimeListString(timeIncludes, knownTimeIncludes);
+            final String timeExcludes = properties.getProperty("timeExcludes", "").trim();
+            parseTimeListString(timeExcludes, knownTimeExcludes);
+
+            String timeMode = properties.getProperty("timeIncludesMode", "ANY").trim();
+            knownTimeIncludesAllMode = "ALL".equalsIgnoreCase(timeMode);
+
             String mode = properties.getProperty("includesMode", "ANY").trim();
             knownIncludesAllMode = "ALL".equalsIgnoreCase(mode);
 
@@ -654,6 +698,48 @@ public final class SearchView extends JFrame {
         }
 
         return linkedHashMap;
+    }
+
+    /**
+     * Parst einen String und überträgt die Werte in die Ziel-Liste für Zeitfilter.
+     *
+     * @param timeString Der zu parsende String
+     * @param targetList Die Ziel-Liste
+     */
+    private void parseTimeListString(final String timeString, final List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> targetList) {
+        targetList.clear();
+        if (!timeString.isEmpty()) {
+            final String[] parts = timeString.split(";");
+            for (String part : parts) {
+                String trimmedPart = part.trim();
+                if (trimmedPart.isEmpty()) {
+                    continue;
+                }
+
+                String[] values = trimmedPart.split("\\|");
+                if (values.length >= 3) {
+                    try {
+                        boolean enabled = Boolean.parseBoolean(values[0]);
+                        long startMillis = Long.parseLong(values[1]);
+                        long endMillis = Long.parseLong(values[2]);
+                        com.mlprograms.searchmax.model.TimeRangeTableModel.Mode mode = com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.DATETIME;
+                        if (values.length >= 4 && values[3] != null && !values[3].isEmpty()) {
+                            try {
+                                mode = com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.valueOf(values[3]);
+                            } catch (IllegalArgumentException iae) {
+                                // keep default
+                            }
+                        }
+
+                        Date startDate = startMillis < 0 ? null : new Date(startMillis);
+                        Date endDate = endMillis < 0 ? null : new Date(endMillis);
+                        targetList.add(new com.mlprograms.searchmax.model.TimeRangeTableModel.Entry(enabled, startDate, endDate, mode));
+                    } catch (NumberFormatException e) {
+                        log.warn("Fehler beim Parsen des Zeitfilter-Eintrags: " + trimmedPart, e);
+                    }
+                }
+            }
+        }
     }
 
 }
