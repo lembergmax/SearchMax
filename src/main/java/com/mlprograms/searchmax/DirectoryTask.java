@@ -22,6 +22,7 @@ import org.apache.poi.extractor.POITextExtractor;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.nio.file.attribute.BasicFileAttributes;
 
 /**
  * Durchsucht ein Verzeichnis rekursiv nach Dateien, die bestimmten Filterkriterien entsprechen.
@@ -606,28 +607,34 @@ public final class DirectoryTask extends RecursiveAction {
 
         try {
             final long lastModifiedMillis = Files.getLastModifiedTime(filePath).toMillis();
+            Long creationMillis;
+            try {
+                creationMillis = Files.readAttributes(filePath, BasicFileAttributes.class).creationTime().toMillis();
+            } catch (Exception ex) {
+                // creationTime may not be available on all platforms; that's fine — fall back to lastModified only
+                creationMillis = null;
+            }
+
             final java.time.ZoneId zone = java.time.ZoneId.systemDefault();
 
-            java.util.function.Predicate<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> matchesEntry = (r) -> {
-                if (r == null || r.start == null || r.end == null) return false;
+            // predicate that checks whether a single timestamp matches an entry
+            final java.util.function.BiPredicate<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry, Long> entryMatchesTimestamp = (r, ts) -> {
+                if (r == null || r.start == null || r.end == null || ts == null) return false;
                 switch (r.mode == null ? com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.DATETIME : r.mode) {
                     case DATE: {
-                        java.time.Instant fileInstant = java.time.Instant.ofEpochMilli(lastModifiedMillis);
-                        java.time.LocalDate fileDate = fileInstant.atZone(zone).toLocalDate();
-
+                        java.time.LocalDate fileDate = java.time.Instant.ofEpochMilli(ts).atZone(zone).toLocalDate();
                         java.time.LocalDate startDate = r.start.toInstant().atZone(zone).toLocalDate();
                         java.time.LocalDate endDate = r.end.toInstant().atZone(zone).toLocalDate();
-
                         return !(fileDate.isBefore(startDate) || fileDate.isAfter(endDate));
                     }
                     case TIME: {
-                        java.time.LocalTime fileTime = java.time.Instant.ofEpochMilli(lastModifiedMillis).atZone(zone).toLocalTime();
+                        java.time.LocalTime fileTime = java.time.Instant.ofEpochMilli(ts).atZone(zone).toLocalTime();
                         java.time.LocalTime startTime = r.start.toInstant().atZone(zone).toLocalTime();
                         java.time.LocalTime endTime = r.end.toInstant().atZone(zone).toLocalTime();
-
                         if (!startTime.isAfter(endTime)) {
                             return !fileTime.isBefore(startTime) && !fileTime.isAfter(endTime);
                         } else {
+                            // wrap-around over midnight
                             return !fileTime.isBefore(startTime) || !fileTime.isAfter(endTime);
                         }
                     }
@@ -635,36 +642,67 @@ public final class DirectoryTask extends RecursiveAction {
                     default: {
                         long s = r.start.getTime();
                         long e = r.end.getTime();
-                        return lastModifiedMillis >= s && lastModifiedMillis <= e;
+                        return ts >= s && ts <= e;
                     }
                 }
             };
 
+            // Excludes: if any exclude entry matches any relevant timestamp -> exclude
             if (timeExcludeRanges != null && !timeExcludeRanges.isEmpty()) {
+                if (log.isDebugEnabled()) {
+                    log.debug("matchesTimeFilters - file={}, lastModified={}, creation={} , excludeEntries={}", filePath, lastModifiedMillis, creationMillis, timeExcludeRanges.size());
+                }
                 for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeExcludeRanges) {
-                    if (matchesEntry.test(r)) return false;
+                    if (r == null) continue;
+                    boolean lmMatch = entryMatchesTimestamp.test(r, lastModifiedMillis);
+                    boolean crMatch = creationMillis != null && entryMatchesTimestamp.test(r, creationMillis);
+                    if (log.isDebugEnabled()) {
+                        log.debug("matchesTimeFilters - exclude entry mode={} start={} end={} -> lmMatch={} crMatch={}", r.mode, r.start, r.end, lmMatch, crMatch);
+                    }
+                    if (lmMatch || crMatch) return false;
                 }
             }
 
+            // If no includes configured, accept the file
             if (timeIncludeRanges == null || timeIncludeRanges.isEmpty()) {
                 return true;
             }
 
             if (timeIncludeAllMode) {
+                // For every include entry, at least one of the timestamps must match
+                if (log.isDebugEnabled()) {
+                    log.debug("matchesTimeFilters - ANY/ALL mode=ALL, file={}, lastModified={}, creation={}, includeEntries={}", filePath, lastModifiedMillis, creationMillis, timeIncludeRanges.size());
+                }
                 for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
                     if (r == null) return false;
-                    if (!matchesEntry.test(r)) return false;
+                    boolean lmMatch = entryMatchesTimestamp.test(r, lastModifiedMillis);
+                    boolean crMatch = creationMillis != null && entryMatchesTimestamp.test(r, creationMillis);
+                    if (log.isDebugEnabled()) {
+                        log.debug("matchesTimeFilters - include entry mode={} start={} end={} -> lmMatch={} crMatch={}", r.mode, r.start, r.end, lmMatch, crMatch);
+                    }
+                    boolean matched = lmMatch || crMatch;
+                    if (!matched) return false;
                 }
                 return true;
             } else {
+                // ANY mode: if any include entry matches any timestamp -> accept
+                if (log.isDebugEnabled()) {
+                    log.debug("matchesTimeFilters - ANY/ALL mode=ANY, file={}, lastModified={}, creation={}, includeEntries={}", filePath, lastModifiedMillis, creationMillis, timeIncludeRanges.size());
+                }
                 for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
                     if (r == null) continue;
-                    if (matchesEntry.test(r)) return true;
+                    boolean lmMatch = entryMatchesTimestamp.test(r, lastModifiedMillis);
+                    boolean crMatch = creationMillis != null && entryMatchesTimestamp.test(r, creationMillis);
+                    if (log.isDebugEnabled()) {
+                        log.debug("matchesTimeFilters - include entry mode={} start={} end={} -> lmMatch={} crMatch={}", r.mode, r.start, r.end, lmMatch, crMatch);
+                    }
+                    if (lmMatch || crMatch) return true;
                 }
                 return false;
             }
         } catch (Exception e) {
-            return true;
+            if (log.isDebugEnabled()) log.debug("matchesTimeFilters - filesystem error for {}: {}", filePath, e.getMessage());
+            return true; // don't block search on filesystem errors
         }
     }
 
@@ -766,4 +804,5 @@ public final class DirectoryTask extends RecursiveAction {
         if (idx <= 0) return fileName;
         return fileName.substring(0, idx);
     }
+
 }

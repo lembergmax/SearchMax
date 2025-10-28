@@ -18,6 +18,12 @@
             <AppenderRef ref="InMemory"/>
         </Root>
 
+        <!-- Application logging: normalerweise INFO (set to DEBUG only for troubleshooting) -->
+        <Logger name="com.mlprograms.searchmax" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="InMemory"/>
+        </Logger>
+
         <!-- Setze verbose Bibliotheken auf WARN, z.B. PDFBox internals -->
         <Logger name="org.apache.pdfbox" level="warn" additivity="false">
             <AppenderRef ref="Console"/>

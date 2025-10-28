@@ -35,9 +35,9 @@ public class TimeRangeTableModel extends AbstractTableModel {
     public List<Entry> getEntries() { return entries; }
 
     public void addEntry(Date start, Date end, Mode mode, boolean enabled) {
-        // einfache Duplikat-Prüfung
+        // einfache, null-sichere Duplikat-Prüfung
         for (Entry e : entries) {
-            if (e.start.equals(start) && e.end.equals(end) && e.mode == mode) return;
+            if (java.util.Objects.equals(e.start, start) && java.util.Objects.equals(e.end, end) && e.mode == mode) return;
         }
         entries.add(new Entry(enabled, start, end, mode));
         fireTableDataChanged();
@@ -97,4 +97,3 @@ public class TimeRangeTableModel extends AbstractTableModel {
 
     public int getRemoveColumnIndex() { return 4; }
 }
-
