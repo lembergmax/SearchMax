@@ -69,8 +69,8 @@ public final class GuiConstants {
     public static final String EXT_COLUMN_EXTENSION = "Extension";
 
     // Extraction settings dialog strings
-    public static final String TITLE_EXTRACTION_SETTINGS = "Text extraction settings";
-    public static final String SECTION_EXTRACTION = "Extraction";
+    public static final String TITLE_EXTRACTION_SETTINGS = "Settings";
+    public static final String SECTION_EXTRACTION = "Text extraction";
     public static final String RADIO_POI_ONLY = "POI only (fast for Office files)";
     public static final String RADIO_TIKA_ONLY = "Tika only (broad support)";
     public static final String RADIO_POI_THEN_TIKA = "POI, then Tika (recommended)";
