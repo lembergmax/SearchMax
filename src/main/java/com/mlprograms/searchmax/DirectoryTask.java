@@ -590,8 +590,88 @@ public final class DirectoryTask extends RecursiveAction {
         return requireAll ? allMatched(matched) : anyMatched(matched);
     }
 
+    // Apache Tika-based extraction helper
+    private String extractTextWithTika(final Path filePath) throws Exception {
+        org.apache.tika.Tika tika = new org.apache.tika.Tika();
+        return tika.parseToString(filePath.toFile());
+    }
+
+    /**
+     * Prüft, ob eine Datei die konfigurierten Zeitfilter erfüllt.
+     */
+    private boolean matchesTimeFilters(final Path filePath) {
+        if ((timeIncludeRanges == null || timeIncludeRanges.isEmpty()) && (timeExcludeRanges == null || timeExcludeRanges.isEmpty())) {
+            return true;
+        }
+
+        try {
+            final long lastModifiedMillis = Files.getLastModifiedTime(filePath).toMillis();
+            final java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+
+            java.util.function.Predicate<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> matchesEntry = (r) -> {
+                if (r == null || r.start == null || r.end == null) return false;
+                switch (r.mode == null ? com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.DATETIME : r.mode) {
+                    case DATE: {
+                        java.time.Instant fileInstant = java.time.Instant.ofEpochMilli(lastModifiedMillis);
+                        java.time.LocalDate fileDate = fileInstant.atZone(zone).toLocalDate();
+
+                        java.time.LocalDate startDate = r.start.toInstant().atZone(zone).toLocalDate();
+                        java.time.LocalDate endDate = r.end.toInstant().atZone(zone).toLocalDate();
+
+                        return !(fileDate.isBefore(startDate) || fileDate.isAfter(endDate));
+                    }
+                    case TIME: {
+                        java.time.LocalTime fileTime = java.time.Instant.ofEpochMilli(lastModifiedMillis).atZone(zone).toLocalTime();
+                        java.time.LocalTime startTime = r.start.toInstant().atZone(zone).toLocalTime();
+                        java.time.LocalTime endTime = r.end.toInstant().atZone(zone).toLocalTime();
+
+                        if (!startTime.isAfter(endTime)) {
+                            return !fileTime.isBefore(startTime) && !fileTime.isAfter(endTime);
+                        } else {
+                            return !fileTime.isBefore(startTime) || !fileTime.isAfter(endTime);
+                        }
+                    }
+                    case DATETIME:
+                    default: {
+                        long s = r.start.getTime();
+                        long e = r.end.getTime();
+                        return lastModifiedMillis >= s && lastModifiedMillis <= e;
+                    }
+                }
+            };
+
+            if (timeExcludeRanges != null && !timeExcludeRanges.isEmpty()) {
+                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeExcludeRanges) {
+                    if (matchesEntry.test(r)) return false;
+                }
+            }
+
+            if (timeIncludeRanges == null || timeIncludeRanges.isEmpty()) {
+                return true;
+            }
+
+            if (timeIncludeAllMode) {
+                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
+                    if (r == null) return false;
+                    if (!matchesEntry.test(r)) return false;
+                }
+                return true;
+            } else {
+                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
+                    if (r == null) continue;
+                    if (matchesEntry.test(r)) return true;
+                }
+                return false;
+            }
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    // Konsolidierte Hilfsmethoden (einmalig vorhanden):
     private List<FilterEntity> buildFilterEntities(final List<String> filters, final Map<String, Boolean> caseMap) {
         List<FilterEntity> filterList = new ArrayList<>();
+        if (filters == null || filters.isEmpty()) return filterList;
         for (String filter : filters) {
             if (filter == null) continue;
             String trimmedFilter = filter.trim();
@@ -638,7 +718,10 @@ public final class DirectoryTask extends RecursiveAction {
     }
 
     private boolean matchesQuery(final String fileName) {
-        return queryLength == 0 || containsIgnoreCase(fileName, query);
+        if (query == null || query.isEmpty()) return true;
+        if (fileName == null) return false;
+        if (caseSensitive) return fileName.contains(query);
+        return fileName.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT));
     }
 
     private boolean matchesIncludeFilters(final String fileName) {
@@ -683,58 +766,4 @@ public final class DirectoryTask extends RecursiveAction {
         if (idx <= 0) return fileName;
         return fileName.substring(0, idx);
     }
-
-    private boolean containsIgnoreCase(final String haystack, final String needle) {
-        if (needle == null || needle.isEmpty()) return true;
-        if (haystack == null) return false;
-        if (caseSensitive) return haystack.contains(needle);
-        return haystack.toLowerCase(Locale.ROOT).contains(needle.toLowerCase(Locale.ROOT));
-    }
-
-    // Apache Tika-based extraction helper
-    private String extractTextWithTika(final Path filePath) throws Exception {
-        org.apache.tika.Tika tika = new org.apache.tika.Tika();
-        return tika.parseToString(filePath.toFile());
-    }
-
-    /**
-     * Prüft, ob eine Datei die konfigurierten Zeitfilter erfüllt.
-     */
-    private boolean matchesTimeFilters(final Path filePath) {
-        if ((timeIncludeRanges == null || timeIncludeRanges.isEmpty()) && (timeExcludeRanges == null || timeExcludeRanges.isEmpty())) {
-            return true;
-        }
-
-        try {
-            long lastModified = Files.getLastModifiedTime(filePath).toMillis();
-
-            if (timeExcludeRanges != null && !timeExcludeRanges.isEmpty()) {
-                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeExcludeRanges) {
-                    if (r == null || r.start == null || r.end == null) continue;
-                    if (lastModified >= r.start.getTime() && lastModified <= r.end.getTime()) return false;
-                }
-            }
-
-            if (timeIncludeRanges == null || timeIncludeRanges.isEmpty()) {
-                return true;
-            }
-
-            if (timeIncludeAllMode) {
-                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
-                    if (r == null || r.start == null || r.end == null) return false;
-                    if (!(lastModified >= r.start.getTime() && lastModified <= r.end.getTime())) return false;
-                }
-                return true;
-            } else {
-                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
-                    if (r == null || r.start == null || r.end == null) continue;
-                    if (lastModified >= r.start.getTime() && lastModified <= r.end.getTime()) return true;
-                }
-                return false;
-            }
-        } catch (Exception e) {
-            return true; // don't block search on filesystem errors
-        }
-    }
-
 }

@@ -622,11 +622,15 @@ public class FiltersDialog extends JDialog {
                     start = Date.from(sdt.atZone(ZoneId.systemDefault()).toInstant());
                     end = Date.from(edt.atZone(ZoneId.systemDefault()).toInstant());
                 } else if (mode == TimeRangeTableModel.Mode.DATE) {
-                    // only dates are relevant: times set to midnight
+                    // only dates are relevant: start = start of day, end = end of day (inclusive)
                     LocalDate sd = startDatePicker.getDate();
                     LocalDate ed = endDatePicker.getDate();
                     if (sd != null) start = Date.from(sd.atStartOfDay(ZoneId.systemDefault()).toInstant());
-                    if (ed != null) end = Date.from(ed.atStartOfDay(ZoneId.systemDefault()).toInstant());
+                    if (ed != null) {
+                        // set end to last millisecond of day
+                        LocalDateTime edtLdt = ed.atTime(23, 59, 59, 999_000_000);
+                        end = Date.from(edtLdt.atZone(ZoneId.systemDefault()).toInstant());
+                    }
                 } else { // DATETIME
                     LocalDate sd = startDatePicker.getDate();
                     LocalTime st = startTimePicker.getTime();
