@@ -4,11 +4,23 @@ import com.mlprograms.searchmax.model.AllowExtensionsTableModel;
 import com.mlprograms.searchmax.model.DenyExtensionsTableModel;
 import com.mlprograms.searchmax.model.ExtensionsTableModelBase;
 import com.mlprograms.searchmax.model.TextFiltersTableModel;
+import com.mlprograms.searchmax.model.TimeRangeTableModel;
+
+import com.github.lgooddatepicker.components.DatePicker;
+import com.github.lgooddatepicker.components.TimePicker;
 
 import javax.swing.*;
 import java.awt.*;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Date;
+import java.util.Calendar;
+import java.util.Properties;
 
 public class FiltersDialog extends JDialog {
 
@@ -17,6 +29,9 @@ public class FiltersDialog extends JDialog {
     // Neue Modelle für Datei-Inhalt
     private final TextFiltersTableModel includesContentModel = new TextFiltersTableModel();
     private final TextFiltersTableModel excludesContentModel = new TextFiltersTableModel();
+    // Zeitspannen-Modelle
+    private final TimeRangeTableModel includesTimeModel = new TimeRangeTableModel();
+    private final TimeRangeTableModel excludesTimeModel = new TimeRangeTableModel();
 
     private final Map<String, Boolean> initialExtensionsAllow;
     private final Map<String, Boolean> initialExtensionsDeny;
@@ -27,9 +42,10 @@ public class FiltersDialog extends JDialog {
     private final Map<String, Boolean> initialContentIncludesCase;
     private final Map<String, Boolean> initialContentExcludesCase;
     private boolean confirmed = false;
-    private boolean includeAllMode = false;
+    private boolean includeAllMode; // Standard ist false, explizite Initialisierung entfernt
     // Modus für Inhalts-Filter: ob alle Filter passen müssen
-    private boolean contentIncludeAllMode = false;
+    private boolean contentIncludeAllMode; // Standard ist false
+    private boolean timeIncludeAllMode; // eigener Modus für Zeitfilter
 
     public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase, boolean initialIncludeAllMode, Map<String, Boolean> initialContentIncludes, Map<String, Boolean> initialContentExcludes, Map<String, Boolean> initialContentIncludesCase, Map<String, Boolean> initialContentExcludesCase, boolean initialContentIncludeAllMode) {
         super(owner, GuiConstants.FILTERS_DIALOG_TITLE, true);
@@ -46,6 +62,7 @@ public class FiltersDialog extends JDialog {
 
         populateFilters(initialIncludes, initialExcludes);
         populateContentFilters(this.initialContentIncludes, this.initialContentExcludes);
+        // Zeitwerte können später hinzugefügt werden - aktuell keine initialen TimeRanges geladen
         applyCaseFlags();
         applyContentCaseFlags();
         initUI();
@@ -128,11 +145,12 @@ public class FiltersDialog extends JDialog {
 
     private void initUI() {
         setLayout(new BorderLayout(8, 8));
-        // GridLayout auf 1x3 erweitert, drittes Panel für Datei-Inhalt in der Mitte
-        JPanel center = new JPanel(new GridLayout(1, 3, 8, 8));
+        // GridLayout auf 1x4 erweitert: Text | Content | Extensions | TimeRanges
+        JPanel center = new JPanel(new GridLayout(1, 4, 8, 8));
         center.add(createTextFiltersPanel());
         center.add(createContentFiltersPanel());
         center.add(createExtensionsPanel());
+        center.add(createTimeFiltersPanel());
         add(center, BorderLayout.CENTER);
         add(createBottomPanel(), BorderLayout.SOUTH);
         registerEscKey();
@@ -348,17 +366,9 @@ public class FiltersDialog extends JDialog {
             else denyModel.setAllEnabled(false);
         });
 
-        this.extensionsAllowGetter = () -> {
-            Map<String, Boolean> out = new LinkedHashMap<>();
-            for (ExtensionsTableModelBase.Entry en : allowModel.getEntries()) out.put(en.ext, en.enabled);
-            return out;
-        };
+        this.extensionsAllowGetter = LinkedHashMap::new;
 
-        this.extensionsDenyGetter = () -> {
-            Map<String, Boolean> out = new LinkedHashMap<>();
-            for (ExtensionsTableModelBase.Entry en : denyModel.getEntries()) out.put(en.ext, en.enabled);
-            return out;
-        };
+        this.extensionsDenyGetter = LinkedHashMap::new;
 
         return extPanel;
     }
@@ -406,6 +416,169 @@ public class FiltersDialog extends JDialog {
     }
 
     private void configureExtensionTable(JTable table, ExtensionsTableModelBase model) {
+        table.setFillsViewportHeight(true);
+        table.setRowHeight(24);
+        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellRenderer(new ButtonCellRenderer());
+        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(model::removeAt));
+    }
+
+    // Neues Panel für Zeitfilter
+    private Component createTimeFiltersPanel() {
+        JPanel panel = new JPanel(new BorderLayout(4, 4));
+        panel.setBorder(BorderFactory.createTitledBorder(GuiConstants.TIME_PANEL_TITLE));
+
+        JTable includeTable = new JTable(includesTimeModel);
+        configureTimeTable(includeTable, includesTimeModel);
+        JTable excludeTable = new JTable(excludesTimeModel);
+        configureTimeTable(excludeTable, excludesTimeModel);
+
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.add(GuiConstants.TAB_ALLOW, new JScrollPane(includeTable));
+        tabs.add(GuiConstants.TAB_DENY, new JScrollPane(excludeTable));
+
+        panel.add(tabs, BorderLayout.CENTER);
+
+        // Top options: Any / All für Zeit-Filter
+        JPanel topOptions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JRadioButton anyBtn = new JRadioButton(GuiConstants.RADIO_ANY);
+        JRadioButton allBtn = new JRadioButton(GuiConstants.RADIO_ALL);
+        ButtonGroup group = new ButtonGroup();
+        group.add(anyBtn);
+        group.add(allBtn);
+        anyBtn.setSelected(!timeIncludeAllMode);
+        allBtn.setSelected(timeIncludeAllMode);
+        anyBtn.addActionListener(e -> timeIncludeAllMode = false);
+        allBtn.addActionListener(e -> timeIncludeAllMode = true);
+        topOptions.add(anyBtn);
+        topOptions.add(allBtn);
+        panel.add(topOptions, BorderLayout.NORTH);
+
+        JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
+        Dimension small = new Dimension(120, 24);
+        JButton add = new JButton(GuiConstants.BUTTON_ADD);
+        add.setPreferredSize(small);
+        JButton enableAll = new JButton(GuiConstants.BUTTON_ENABLE_ALL);
+        enableAll.setPreferredSize(small);
+        JButton disableAll = new JButton(GuiConstants.BUTTON_DISABLE_ALL);
+        disableAll.setPreferredSize(small);
+        btnBar.add(add);
+        btnBar.add(enableAll);
+        btnBar.add(disableAll);
+        panel.add(btnBar, BorderLayout.SOUTH);
+
+        add.addActionListener(e -> {
+            // Dialog: Modus-Auswahl + klickbare Eingaben (DatePicker + TimePicker)
+            JPanel inputPanel = new JPanel(new GridBagLayout());
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(4, 4, 4, 4);
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+
+            JLabel modeLbl = new JLabel(GuiConstants.LABEL_MODE);
+            String[] modes = {GuiConstants.MODE_TIME, GuiConstants.MODE_DATE, GuiConstants.MODE_DATETIME};
+            JComboBox<String> modeCombo = new JComboBox<>(modes);
+
+            // DatePicker / TimePicker setup (LGoodDatePicker)
+            DatePicker startDatePicker = new DatePicker();
+            DatePicker endDatePicker = new DatePicker();
+            TimePicker startTimePicker = new TimePicker();
+            TimePicker endTimePicker = new TimePicker();
+
+            // initialize some defaults
+            startTimePicker.setTime(LocalTime.now().withSecond(0).withNano(0));
+            endTimePicker.setTime(LocalTime.now().plusHours(1).withSecond(0).withNano(0));
+
+            // Editor switching based on mode
+            Runnable applyEditor = () -> {
+                String sel = (String) modeCombo.getSelectedItem();
+                boolean showDate = !GuiConstants.MODE_TIME.equals(sel);
+                boolean showTime = !GuiConstants.MODE_DATE.equals(sel);
+                startDatePicker.setVisible(showDate);
+                endDatePicker.setVisible(showDate);
+                startTimePicker.setVisible(showTime);
+                endTimePicker.setVisible(showTime);
+                // use the dialog's inputPanel to revalidate/repaint (safer than getParent() on the pickers)
+                inputPanel.revalidate();
+                inputPanel.repaint();
+            };
+            applyEditor.run();
+            modeCombo.addActionListener(ev -> applyEditor.run());
+
+            gbc.gridx = 0; gbc.gridy = 0; inputPanel.add(modeLbl, gbc);
+            gbc.gridx = 1; gbc.gridy = 0; inputPanel.add(modeCombo, gbc);
+            gbc.gridx = 0; gbc.gridy = 1; inputPanel.add(new JLabel(GuiConstants.LABEL_FROM), gbc);
+            gbc.gridx = 1; gbc.gridy = 1; inputPanel.add(startDatePicker, gbc);
+            gbc.gridx = 2; gbc.gridy = 1; inputPanel.add(startTimePicker, gbc);
+            gbc.gridx = 0; gbc.gridy = 2; inputPanel.add(new JLabel(GuiConstants.LABEL_TO), gbc);
+            gbc.gridx = 1; gbc.gridy = 2; inputPanel.add(endDatePicker, gbc);
+            gbc.gridx = 2; gbc.gridy = 2; inputPanel.add(endTimePicker, gbc);
+
+            int result = JOptionPane.showConfirmDialog(this, inputPanel, GuiConstants.INPUT_ADD_TIME_TITLE, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+            if (result == JOptionPane.OK_OPTION) {
+                String sel = (String) modeCombo.getSelectedItem();
+                TimeRangeTableModel.Mode mode = TimeRangeTableModel.Mode.TIME;
+                if (GuiConstants.MODE_DATE.equals(sel)) mode = TimeRangeTableModel.Mode.DATE;
+                else if (GuiConstants.MODE_DATETIME.equals(sel)) mode = TimeRangeTableModel.Mode.DATETIME;
+
+                Date start = null;
+                Date end = null;
+
+                // Compose Date from pickers according to mode
+                if (mode == TimeRangeTableModel.Mode.TIME) {
+                    // only times are relevant: use today's date normalized to epoch day for consistency
+                    LocalTime st = startTimePicker.getTime();
+                    LocalTime en = endTimePicker.getTime();
+                    LocalDate base = LocalDate.of(1970, 1, 1);
+                    LocalDateTime sdt = LocalDateTime.of(base, st == null ? LocalTime.MIDNIGHT : st);
+                    LocalDateTime edt = LocalDateTime.of(base, en == null ? LocalTime.MIDNIGHT : en);
+                    start = Date.from(sdt.atZone(ZoneId.systemDefault()).toInstant());
+                    end = Date.from(edt.atZone(ZoneId.systemDefault()).toInstant());
+                } else if (mode == TimeRangeTableModel.Mode.DATE) {
+                    // only dates are relevant: times set to midnight
+                    LocalDate sd = startDatePicker.getDate();
+                    LocalDate ed = endDatePicker.getDate();
+                    if (sd != null) start = Date.from(sd.atStartOfDay(ZoneId.systemDefault()).toInstant());
+                    if (ed != null) end = Date.from(ed.atStartOfDay(ZoneId.systemDefault()).toInstant());
+                } else { // DATETIME
+                    LocalDate sd = startDatePicker.getDate();
+                    LocalTime st = startTimePicker.getTime();
+                    LocalDate ed = endDatePicker.getDate();
+                    LocalTime en = endTimePicker.getTime();
+                    if (sd != null && st != null) start = Date.from(LocalDateTime.of(sd, st).atZone(ZoneId.systemDefault()).toInstant());
+                    if (ed != null && en != null) end = Date.from(LocalDateTime.of(ed, en).atZone(ZoneId.systemDefault()).toInstant());
+                }
+
+                // Validierung
+                if (start == null || end == null) {
+                    JOptionPane.showMessageDialog(this, GuiConstants.MSG_INVALID_TIME_RANGE, GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                if (start.after(end)) {
+                    JOptionPane.showMessageDialog(this, GuiConstants.MSG_INVALID_TIME_RANGE, GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+
+                int idx = tabs.getSelectedIndex();
+                if (idx == 0) includesTimeModel.addEntry(start, end, mode, true);
+                else excludesTimeModel.addEntry(start, end, mode, true);
+            }
+        });
+
+        enableAll.addActionListener(e -> {
+            int idx = tabs.getSelectedIndex();
+            if (idx == 0) includesTimeModel.setAllEnabled(true);
+            else excludesTimeModel.setAllEnabled(true);
+        });
+        disableAll.addActionListener(e -> {
+            int idx = tabs.getSelectedIndex();
+            if (idx == 0) includesTimeModel.setAllEnabled(false);
+            else excludesTimeModel.setAllEnabled(false);
+        });
+
+        return panel;
+    }
+
+    private void configureTimeTable(JTable table, TimeRangeTableModel model) {
         table.setFillsViewportHeight(true);
         table.setRowHeight(24);
         table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellRenderer(new ButtonCellRenderer());
@@ -489,8 +662,17 @@ public class FiltersDialog extends JDialog {
         return out;
     }
 
-    private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsAllowGetter = () -> new LinkedHashMap<>();
-    private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsDenyGetter = () -> new LinkedHashMap<>();
+    // Getter für Zeitfilter
+    public java.util.List<TimeRangeTableModel.Entry> getTimeIncludes() {
+        return new java.util.ArrayList<>(includesTimeModel.getEntries());
+    }
+
+    public java.util.List<TimeRangeTableModel.Entry> getTimeExcludes() {
+        return new java.util.ArrayList<>(excludesTimeModel.getEntries());
+    }
+
+    private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsAllowGetter = LinkedHashMap::new;
+    private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsDenyGetter = LinkedHashMap::new;
 
     public java.util.Map<String, Boolean> getExtensionsAllowMap() {
         return extensionsAllowGetter.get();
