@@ -11,7 +11,6 @@ import com.github.lgooddatepicker.components.TimePicker;
 
 import javax.swing.*;
 import java.awt.*;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -19,10 +18,16 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Date;
-import java.util.Calendar;
-import java.util.Properties;
 
 public class FiltersDialog extends JDialog {
+
+    // --- Anpassbare UI-Größen (zentral hier ändern) -----------------
+    private static final int DATE_PICKER_WIDTH = 220; // Breite des DatePickers (inkl. '...'-Button)
+    private static final int TIME_PICKER_WIDTH = 110; // Breite des TimePickers
+    private static final int PICKER_HEIGHT = 28;
+    private static final int DIALOG_EXTRA_WIDTH = 250; // zusätzlicher Raum für Ränder
+    private static final int DIALOG_EXTRA_HEIGHT = 75; // zusätzlicher Raum für Titel/Buttons
+    // ----------------------------------------------------------------
 
     private final TextFiltersTableModel includesTextModel = new TextFiltersTableModel();
     private final TextFiltersTableModel excludesTextModel = new TextFiltersTableModel();
@@ -470,7 +475,7 @@ public class FiltersDialog extends JDialog {
             // Dialog: Modus-Auswahl + klickbare Eingaben (DatePicker + TimePicker)
             JPanel inputPanel = new JPanel(new GridBagLayout());
             GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(4, 4, 4, 4);
+            gbc.insets = new Insets(6, 6, 6, 6);
             gbc.fill = GridBagConstraints.HORIZONTAL;
 
             JLabel modeLbl = new JLabel(GuiConstants.LABEL_MODE);
@@ -483,11 +488,33 @@ public class FiltersDialog extends JDialog {
             TimePicker startTimePicker = new TimePicker();
             TimePicker endTimePicker = new TimePicker();
 
-            // initialize some defaults
+            // Keine erzwungene preferredSize: DatePicker/TimePicker verwenden ihre nativen PreferredSizes
+            // (so werden Panels nur so groß wie nötig)
+            // moderate PreferredSizes so the DatePicker button is visible, but panels stay as small as necessary
+            startDatePicker.setPreferredSize(new Dimension(DATE_PICKER_WIDTH, PICKER_HEIGHT));
+            endDatePicker.setPreferredSize(new Dimension(DATE_PICKER_WIDTH, PICKER_HEIGHT));
+            startTimePicker.setPreferredSize(new Dimension(TIME_PICKER_WIDTH, PICKER_HEIGHT));
+            endTimePicker.setPreferredSize(new Dimension(TIME_PICKER_WIDTH, PICKER_HEIGHT));
+
+            // Panels that combine Date + Time horizontally for a cleaner layout
+            JPanel startPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+            startPanel.add(startDatePicker);
+            startPanel.add(startTimePicker);
+            JPanel endPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+            endPanel.add(endDatePicker);
+            endPanel.add(endTimePicker);
+
+            // sensible defaults
             startTimePicker.setTime(LocalTime.now().withSecond(0).withNano(0));
             endTimePicker.setTime(LocalTime.now().plusHours(1).withSecond(0).withNano(0));
+            startDatePicker.setDate(LocalDate.now());
+            endDatePicker.setDate(LocalDate.now());
 
-            // Editor switching based on mode
+            // Scroll pane wrapper so the dialog can shrink and still allow access to all controls
+            inputPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+            // Editor switching based on mode; will revalidate the scroll's viewport if present
+            final JScrollPane[] scrollRef = new JScrollPane[1];
             Runnable applyEditor = () -> {
                 String sel = (String) modeCombo.getSelectedItem();
                 boolean showDate = !GuiConstants.MODE_TIME.equals(sel);
@@ -496,24 +523,63 @@ public class FiltersDialog extends JDialog {
                 endDatePicker.setVisible(showDate);
                 startTimePicker.setVisible(showTime);
                 endTimePicker.setVisible(showTime);
-                // use the dialog's inputPanel to revalidate/repaint (safer than getParent() on the pickers)
-                inputPanel.revalidate();
-                inputPanel.repaint();
+                // ensure defaults when switching to modes
+                if (GuiConstants.MODE_DATETIME.equals(sel)) {
+                    if (startDatePicker.getDate() == null) startDatePicker.setDate(LocalDate.now());
+                    if (endDatePicker.getDate() == null) endDatePicker.setDate(LocalDate.now());
+                    if (startTimePicker.getTime() == null) startTimePicker.setTime(LocalTime.now().withSecond(0).withNano(0));
+                    if (endTimePicker.getTime() == null) endTimePicker.setTime(LocalTime.now().plusHours(1).withSecond(0).withNano(0));
+                }
+                if (scrollRef[0] != null) {
+                    scrollRef[0].getViewport().revalidate();
+                    scrollRef[0].revalidate();
+                    scrollRef[0].repaint();
+                } else {
+                    inputPanel.revalidate();
+                    inputPanel.repaint();
+                }
             };
             applyEditor.run();
             modeCombo.addActionListener(ev -> applyEditor.run());
 
-            gbc.gridx = 0; gbc.gridy = 0; inputPanel.add(modeLbl, gbc);
-            gbc.gridx = 1; gbc.gridy = 0; inputPanel.add(modeCombo, gbc);
-            gbc.gridx = 0; gbc.gridy = 1; inputPanel.add(new JLabel(GuiConstants.LABEL_FROM), gbc);
-            gbc.gridx = 1; gbc.gridy = 1; inputPanel.add(startDatePicker, gbc);
-            gbc.gridx = 2; gbc.gridy = 1; inputPanel.add(startTimePicker, gbc);
-            gbc.gridx = 0; gbc.gridy = 2; inputPanel.add(new JLabel(GuiConstants.LABEL_TO), gbc);
-            gbc.gridx = 1; gbc.gridy = 2; inputPanel.add(endDatePicker, gbc);
-            gbc.gridx = 2; gbc.gridy = 2; inputPanel.add(endTimePicker, gbc);
+            // layout: Mode row
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; inputPanel.add(modeLbl, gbc);
+            gbc.gridx = 1; gbc.gridy = 0; gbc.gridwidth = 2; inputPanel.add(modeCombo, gbc);
+            // From row: label + combined panel
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; inputPanel.add(new JLabel(GuiConstants.LABEL_FROM), gbc);
+            gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 2; inputPanel.add(startPanel, gbc);
+            // To row
+            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1; inputPanel.add(new JLabel(GuiConstants.LABEL_TO), gbc);
+            gbc.gridx = 1; gbc.gridy = 2; gbc.gridwidth = 2; inputPanel.add(endPanel, gbc);
 
-            int result = JOptionPane.showConfirmDialog(this, inputPanel, GuiConstants.INPUT_ADD_TIME_TITLE, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-            if (result == JOptionPane.OK_OPTION) {
+            // Let the inputPanel size itself and only use a JScrollPane so the dialog can be smaller on demand
+            JScrollPane scroll = new JScrollPane(inputPanel);
+            scroll.setBorder(BorderFactory.createEmptyBorder());
+            scrollRef[0] = scroll;
+
+            // Build dialog from the scroll pane; pack so it's only as large as needed, but allow resizing
+            JOptionPane pane = new JOptionPane(scroll, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
+            JDialog dialog = pane.createDialog(this, GuiConstants.INPUT_ADD_TIME_TITLE);
+            dialog.pack();
+            dialog.setResizable(true);
+            // Make sure the dialog is at least as large as the inputPanel wants to be
+            Dimension contentPref = inputPanel.getPreferredSize();
+            if (contentPref != null && contentPref.width > 0 && contentPref.height > 0) {
+                // account for dialog chrome (insets) and option button area
+                Insets ins = dialog.getInsets();
+                int extraW = ins.left + ins.right + DIALOG_EXTRA_WIDTH; // safety padding for borders
+                int extraH = ins.top + ins.bottom + DIALOG_EXTRA_HEIGHT; // title + buttons area
+                Dimension packed = dialog.getSize();
+                int w = Math.max(packed.width, contentPref.width + extraW);
+                int h = Math.max(packed.height, contentPref.height + extraH);
+                dialog.setSize(w, h);
+            }
+            dialog.setLocationRelativeTo(this);
+            dialog.setVisible(true);
+             Object selected = pane.getValue();
+             int result = JOptionPane.CLOSED_OPTION;
+             if (selected instanceof Integer) result = (Integer) selected;
+             if (result == JOptionPane.OK_OPTION) {
                 String sel = (String) modeCombo.getSelectedItem();
                 TimeRangeTableModel.Mode mode = TimeRangeTableModel.Mode.TIME;
                 if (GuiConstants.MODE_DATE.equals(sel)) mode = TimeRangeTableModel.Mode.DATE;
