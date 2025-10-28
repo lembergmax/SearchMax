@@ -136,8 +136,12 @@ public final class DirectoryTask extends RecursiveAction {
     private final boolean contentIncludeAllMode;
     // Extraction mode (POI only, Tika only, or POI then Tika fallback)
     private final ExtractionMode extractionMode;
+    // Zeitfilter
+    private final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludeRanges;
+    private final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludeRanges;
+    private final boolean timeIncludeAllMode;
 
-    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode, final List<String> contentIncludeFilters, final Map<String, Boolean> contentIncludeCaseMap, final List<String> contentExcludeFilters, final Map<String, Boolean> contentExcludeCaseMap, final boolean contentIncludeAllMode, final ExtractionMode extractionMode) {
+    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode, final List<String> contentIncludeFilters, final Map<String, Boolean> contentIncludeCaseMap, final List<String> contentExcludeFilters, final Map<String, Boolean> contentExcludeCaseMap, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludeRanges, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludeRanges, final boolean timeIncludeAllMode, final ExtractionMode extractionMode) {
         this.directoryPath = directoryPath;
         this.result = (result == null) ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -161,6 +165,9 @@ public final class DirectoryTask extends RecursiveAction {
         this.contentExcludeFilters = (contentExcludeFilters == null || contentExcludeFilters.isEmpty()) ? null : new ArrayList<>(contentExcludeFilters);
         this.contentExcludeCaseMap = (contentExcludeCaseMap == null || contentExcludeCaseMap.isEmpty()) ? null : new HashMap<>(contentExcludeCaseMap);
         this.contentIncludeAllMode = contentIncludeAllMode;
+        this.timeIncludeRanges = (timeIncludeRanges == null || timeIncludeRanges.isEmpty()) ? null : new java.util.ArrayList<>(timeIncludeRanges);
+        this.timeExcludeRanges = (timeExcludeRanges == null || timeExcludeRanges.isEmpty()) ? null : new java.util.ArrayList<>(timeExcludeRanges);
+        this.timeIncludeAllMode = timeIncludeAllMode;
         this.extractionMode = extractionMode == null ? ExtractionMode.POI_THEN_TIKA : extractionMode;
     }
 
@@ -227,7 +234,7 @@ public final class DirectoryTask extends RecursiveAction {
      * @return Neuer DirectoryTask für das Unterverzeichnis
      */
     private DirectoryTask createSubtask(Path subDir) {
-        return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode, extractionMode);
+        return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode, timeIncludeRanges, timeExcludeRanges, timeIncludeAllMode, extractionMode);
     }
 
     /**
@@ -274,6 +281,9 @@ public final class DirectoryTask extends RecursiveAction {
             return;
         }
         if (!matchesContentFilters(filePath)) {
+            return;
+        }
+        if (!matchesTimeFilters(filePath)) {
             return;
         }
 
@@ -669,42 +679,61 @@ public final class DirectoryTask extends RecursiveAction {
 
     private String stripExtension(String fileName) {
         if (fileName == null) return "";
-        int index = fileName.lastIndexOf('.');
-        if (index > 0) {
-            return fileName.substring(0, index);
-        }
-        return fileName;
+        int idx = fileName.lastIndexOf('.');
+        if (idx <= 0) return fileName;
+        return fileName.substring(0, idx);
     }
 
-    private boolean containsIgnoreCase(final String source, final String target) {
-        if (target == null || target.isEmpty()) {
+    private boolean containsIgnoreCase(final String haystack, final String needle) {
+        if (needle == null || needle.isEmpty()) return true;
+        if (haystack == null) return false;
+        if (caseSensitive) return haystack.contains(needle);
+        return haystack.toLowerCase(Locale.ROOT).contains(needle.toLowerCase(Locale.ROOT));
+    }
+
+    // Apache Tika-based extraction helper
+    private String extractTextWithTika(final Path filePath) throws Exception {
+        org.apache.tika.Tika tika = new org.apache.tika.Tika();
+        return tika.parseToString(filePath.toFile());
+    }
+
+    /**
+     * Prüft, ob eine Datei die konfigurierten Zeitfilter erfüllt.
+     */
+    private boolean matchesTimeFilters(final Path filePath) {
+        if ((timeIncludeRanges == null || timeIncludeRanges.isEmpty()) && (timeExcludeRanges == null || timeExcludeRanges.isEmpty())) {
             return true;
         }
-        if (source == null || source.length() < target.length()) {
-            return false;
-        }
 
-        final boolean ignoreCase = !caseSensitive;
-        final int targetLength = target.length();
-        final int max = source.length() - targetLength;
+        try {
+            long lastModified = Files.getLastModifiedTime(filePath).toMillis();
 
-        for (int i = 0; i <= max; i++) {
-            if (source.regionMatches(ignoreCase, i, target, 0, targetLength)) {
+            if (timeExcludeRanges != null && !timeExcludeRanges.isEmpty()) {
+                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeExcludeRanges) {
+                    if (r == null || r.start == null || r.end == null) continue;
+                    if (lastModified >= r.start.getTime() && lastModified <= r.end.getTime()) return false;
+                }
+            }
+
+            if (timeIncludeRanges == null || timeIncludeRanges.isEmpty()) {
                 return true;
             }
-        }
 
-        return false;
-    }
-
-    private String extractTextWithTika(final Path filePath) throws Exception {
-        org.apache.tika.parser.AutoDetectParser parser = new org.apache.tika.parser.AutoDetectParser();
-        org.apache.tika.metadata.Metadata metadata = new org.apache.tika.metadata.Metadata();
-        try (java.io.InputStream is = java.nio.file.Files.newInputStream(filePath)) {
-            org.apache.tika.sax.BodyContentHandler handler = new org.apache.tika.sax.BodyContentHandler(-1);
-            org.apache.tika.parser.ParseContext context = new org.apache.tika.parser.ParseContext();
-            parser.parse(is, handler, metadata, context);
-            return handler.toString();
+            if (timeIncludeAllMode) {
+                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
+                    if (r == null || r.start == null || r.end == null) return false;
+                    if (!(lastModified >= r.start.getTime() && lastModified <= r.end.getTime())) return false;
+                }
+                return true;
+            } else {
+                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
+                    if (r == null || r.start == null || r.end == null) continue;
+                    if (lastModified >= r.start.getTime() && lastModified <= r.end.getTime()) return true;
+                }
+                return false;
+            }
+        } catch (Exception e) {
+            return true; // don't block search on filesystem errors
         }
     }
 

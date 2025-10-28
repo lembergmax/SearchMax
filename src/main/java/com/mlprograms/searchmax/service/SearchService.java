@@ -3,7 +3,6 @@ package com.mlprograms.searchmax.service;
 import com.mlprograms.searchmax.DirectoryTask;
 import com.mlprograms.searchmax.SearchHandle;
 import com.mlprograms.searchmax.ExtractionMode;
-import com.mlprograms.searchmax.view.GuiConstants;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -50,34 +49,39 @@ public final class SearchService {
     }
 
     public void search(final String folderPath, final String queryText, final List<String> drives, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode) {
+        // Delegate to the full-version with time filters (pass nulls)
+        search(folderPath, queryText, drives, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, null, null, false);
+    }
+
+    public void search(final String folderPath, final String queryText, final List<String> drives, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludes, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludes, final boolean timeIncludeAllMode) {
         if (listener == null) {
             throw new IllegalArgumentException("Listener darf nicht null sein");
         }
 
         if (drives != null && !drives.isEmpty()) {
-            handleSearchSelectedDrives(drives, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+            handleSearchSelectedDrives(drives, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, timeIncludes, timeExcludes, timeIncludeAllMode);
             return;
         }
 
         if (folderPath != null) {
             final String trimmed = folderPath.trim();
             if (trimmed.length() == 1 && Character.isLetter(trimmed.charAt(0))) {
-                handleSearchSelectedDrives(trimmed, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+                handleSearchSelectedDrives(trimmed, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, timeIncludes, timeExcludes, timeIncludeAllMode);
                 return;
             }
         }
 
         if ("*".equals(folderPath)) {
-            handleSearchAllDrives(queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, null, null, null, null, false);
+            handleSearchAllDrivesInternal(queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, timeIncludes, timeExcludes, timeIncludeAllMode);
             return;
         }
 
         if (isDriveList(folderPath)) {
-            handleSearchSelectedDrives(folderPath, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+            handleSearchSelectedDrives(folderPath, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, timeIncludes, timeExcludes, timeIncludeAllMode);
             return;
         }
 
-        startSearch(folderPath, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+        startSearch(folderPath, queryText, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, timeIncludes, timeExcludes, timeIncludeAllMode);
     }
 
     public boolean cancel() {
@@ -129,8 +133,7 @@ public final class SearchService {
         return true;
     }
 
-    private void handleSearchAllDrives(final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode) {
-        // Delegate to the overload that accepts content filters (pass nulls/defaults)
+    private void handleSearchAllDrivesInternal(final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludes, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludes, final boolean timeIncludeAllMode) {
         final File[] roots = File.listRoots();
         if (roots == null || roots.length == 0) {
             listener.onError("Keine Laufwerke gefunden");
@@ -146,7 +149,7 @@ public final class SearchService {
         for (File root : roots) {
             final Path rootPath = root.toPath();
             if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, null, null, null, null, false);
+                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, timeIncludes, timeExcludes, timeIncludeAllMode);
             } else {
                 handle.getRemainingTasks().decrementAndGet();
             }
@@ -155,34 +158,7 @@ public final class SearchService {
         checkComplete(handle, listener);
     }
 
-    // Overload with content params
-    private void handleSearchAllDrives(final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode) {
-        final File[] roots = File.listRoots();
-        if (roots == null || roots.length == 0) {
-            listener.onError("Keine Laufwerke gefunden");
-            return;
-        }
-
-        final long startNano = System.nanoTime();
-        final String searchId = UUID.randomUUID().toString();
-        final SearchHandle handle = createSearchHandle(startNano, roots.length);
-
-        searches.put(searchId, handle);
-
-        for (File root : roots) {
-            final Path rootPath = root.toPath();
-            if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
-            } else {
-                handle.getRemainingTasks().decrementAndGet();
-            }
-        }
-
-        checkComplete(handle, listener);
-    }
-
-    // Overloads for selected drives with content params
-    private void handleSearchSelectedDrives(final String folderPathList, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode) {
+    private void handleSearchSelectedDrives(final String folderPathList, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludes, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludes, final boolean timeIncludeAllMode) {
         final String[] tokens = folderPathList.split(",");
         if (tokens.length == 0) {
             listener.onError("Keine Laufwerke angegeben");
@@ -205,7 +181,7 @@ public final class SearchService {
             String normalized = normalizeDrivePath(t);
             final Path rootPath = Paths.get(normalized);
             if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, timeIncludes, timeExcludes, timeIncludeAllMode);
             } else {
                 handle.getRemainingTasks().decrementAndGet();
             }
@@ -214,7 +190,7 @@ public final class SearchService {
         checkComplete(handle, listener);
     }
 
-    private void handleSearchSelectedDrives(final List<String> drives, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode) {
+    private void handleSearchSelectedDrives(final List<String> drives, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludes, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludes, final boolean timeIncludeAllMode) {
         if (drives == null || drives.isEmpty()) {
             listener.onError("Keine Laufwerke angegeben");
             return;
@@ -226,17 +202,15 @@ public final class SearchService {
 
         searches.put(searchId, handle);
 
-        for (String raw : drives) {
-            final String t = raw == null ? "" : raw.trim();
-            if (t.isEmpty()) {
+        for (String drive : drives) {
+            if (drive == null || drive.isEmpty()) {
                 handle.getRemainingTasks().decrementAndGet();
                 continue;
             }
 
-            String normalized = normalizeDrivePath(t);
-            final Path rootPath = Paths.get(normalized);
+            final Path rootPath = Paths.get(drive);
             if (Files.exists(rootPath)) {
-                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+                startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, timeIncludes, timeExcludes, timeIncludeAllMode);
             } else {
                 handle.getRemainingTasks().decrementAndGet();
             }
@@ -245,109 +219,105 @@ public final class SearchService {
         checkComplete(handle, listener);
     }
 
-    // Startet eine normale Suche in einem einzelnen Ordner
-    private void startSearch(final String folderPath, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode) {
-        if (folderPath == null || folderPath.trim().isEmpty()) {
-            listener.onError("Kein Pfad angegeben");
-            return;
-        }
-
-        final Path rootPath = Paths.get(folderPath.trim());
-        if (!Files.exists(rootPath)) {
-            listener.onError("Pfad nicht gefunden: " + folderPath);
+    private void startSearch(final String folderPath, final String queryText, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludes, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludes, final boolean timeIncludeAllMode) {
+        final Path startPath = Paths.get(folderPath);
+        if (!Files.exists(startPath)) {
+            listener.onError("Der angegebene Ordner existiert nicht: " + folderPath);
             return;
         }
 
         final long startNano = System.nanoTime();
         final String searchId = UUID.randomUUID().toString();
         final SearchHandle handle = createSearchHandle(startNano, 1);
+
         searches.put(searchId, handle);
 
-        startSearchTask(searchId, rootPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode);
+        startSearchTask(searchId, startPath, queryText, handle, listener, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, timeIncludes, timeExcludes, timeIncludeAllMode);
 
         checkComplete(handle, listener);
     }
 
-    // Erstellt und startet eine DirectoryTask für einen gegebenen rootPath. Registriert die ForkJoinTask im Handle
-    // und sorgt dafür, dass beim Abschluss completeHandle(...) aufgerufen wird.
-    private void startSearchTask(final String searchId, final Path rootPath, final String queryText, final SearchHandle handle, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode) {
-        if (handle == null || rootPath == null) {
-            return;
-        }
-
-        // Emitter, der Ergebnisse über safeSendMatch an den Listener weiterreicht
-        java.util.function.Consumer<String> emitter = data -> safeSendMatch(listener, data);
-
-        final DirectoryTask task = new DirectoryTask(rootPath, handle.getResults(), handle.getMatchCount(), queryText, handle.getStartNano(), emitter, handle.getCancelled(), caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, includeAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, contentIncludeAllMode, extractionMode);
-
-        // Submit in den konfigurierten ForkJoinPool
-        final ForkJoinTask<?> fjt = pool.submit((ForkJoinTask<?>) task);
-        handle.addTask(fjt);
-        handle.setTask(fjt);
-
-        // Startet einen kurzen Daemon-Thread, der auf das Ende der Task wartet und dann completeHandle aufruft.
-        Thread waiter = new Thread(() -> {
-            try {
-                try {
-                    fjt.join();
-                } catch (Throwable ignore) {
-                    // Ignoriere Join-Fehler, rufe trotzdem completeHandle auf
-                }
-            } finally {
-                completeHandle(handle, listener);
-            }
-        }, "search-waiter");
-        waiter.setDaemon(true);
-        waiter.start();
+    private void startSearchTask(final String searchId, final Path rootPath, final String queryText, final SearchHandle handle, final SearchEventListener listener, final boolean caseSensitive, final List<String> extensionsAllow, final List<String> extensionsDeny, final List<String> includes, final java.util.Map<String, Boolean> includesCase, final List<String> excludes, final java.util.Map<String, Boolean> excludesCase, final boolean includeAllMode, final List<String> contentIncludes, final java.util.Map<String, Boolean> contentIncludesCase, final List<String> contentExcludes, final java.util.Map<String, Boolean> contentExcludesCase, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludes, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludes, final boolean timeIncludeAllMode) {
+        // Create DirectoryTask with the correct argument order expected by DirectoryTask constructor
+        final DirectoryTask task = new DirectoryTask(rootPath,
+                handle.getResults(),
+                handle.getMatchCount(),
+                queryText,
+                handle.getStartNano(),
+                (s) -> safeSendMatch(listener, s),
+                handle.getCancelled(),
+                caseSensitive,
+                extensionsAllow,
+                extensionsDeny,
+                includes,
+                includesCase,
+                excludes,
+                excludesCase,
+                includeAllMode,
+                contentIncludes,
+                contentIncludesCase,
+                contentExcludes,
+                contentExcludesCase,
+                contentIncludeAllMode,
+                timeIncludes,
+                timeExcludes,
+                timeIncludeAllMode,
+                extractionMode);
+        // Register and submit
+        handle.getTasks().add(task);
+        handle.getRemainingTasks().incrementAndGet();
+        pool.submit(task);
     }
 
     private SearchHandle createSearchHandle(long startNano, int remainingTasks) {
         return new SearchHandle(null, startNano, new AtomicInteger(remainingTasks), new AtomicInteger(0), new ConcurrentLinkedQueue<>(), remainingTasks);
     }
 
-    private void completeHandle(final SearchHandle handle, final SearchEventListener listener) {
-        try {
-            if (handle == null) {
-                return;
-            }
-
-            final int left = handle.getRemainingTasks().decrementAndGet();
-            if (left <= 0) {
-                final int total = handle.getMatchCount().get();
-                listener.onEnd(String.format("%d " + GuiConstants.FILES_FOUND, total));
+    private void checkComplete(final SearchHandle handle, final SearchEventListener listener) {
+        pool.submit(() -> {
+            try {
+                while (handle.getRemainingTasks().get() > 0) {
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+                final int total = handle.getMatchCount() == null ? 0 : handle.getMatchCount().get();
+                listener.onEnd(String.format("%d files found", total));
                 searches.entrySet().removeIf(e -> e.getValue() == handle);
+            } catch (Exception e) {
+                log.debug("checkComplete thread interrupted", e);
             }
-        } catch (Exception e) {
-            log.warn("Fehler beim Abschließen des Handles", e);
-        }
+        });
     }
 
     private void safeSendMatch(final SearchEventListener listener, final String data) {
         try {
             listener.onMatch(data);
         } catch (Exception e) {
-            log.info("Fehler beim Senden von Match", e);
+            log.debug("Fehler beim Senden von Match", e);
         }
     }
 
-    private void checkComplete(SearchHandle handle, SearchEventListener listener) {
-        if (handle.getRemainingTasks().get() <= 0) {
-            final int total = handle.getMatchCount().get();
-            listener.onEnd(String.format("%d " + GuiConstants.FILES_FOUND, total));
-            searches.entrySet().removeIf(e -> e.getValue() == handle);
+    private String normalizeDrivePath(final String drivePath) {
+        if (drivePath == null) {
+            return null;
         }
+
+        final String trimmed = drivePath.trim();
+        if (trimmed.length() == 1 && Character.isLetter(trimmed.charAt(0))) {
+            return trimmed + ":\\";
+        }
+        if (trimmed.length() == 2 && Character.isLetter(trimmed.charAt(0)) && trimmed.charAt(1) == ':') {
+            return trimmed + "\\";
+        }
+        if (trimmed.length() == 3 && Character.isLetter(trimmed.charAt(0)) && trimmed.charAt(1) == ':' && (trimmed.charAt(2) == '\\' || trimmed.charAt(2) == '/')) {
+            return trimmed;
+        }
+
+        return null;
     }
-
-    private String normalizeDrivePath(String raw) {
-        if (raw.length() == 1 && Character.isLetter(raw.charAt(0))) {
-            return raw + ":\\";
-        }
-
-        if (raw.length() == 2 && Character.isLetter(raw.charAt(0)) && raw.charAt(1) == ':') {
-            return raw + "\\";
-        }
-
-        return raw;
-    }
-
 }
+

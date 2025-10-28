@@ -46,13 +46,15 @@ public class FiltersDialog extends JDialog {
     private final Map<String, Boolean> initialContentExcludes;
     private final Map<String, Boolean> initialContentIncludesCase;
     private final Map<String, Boolean> initialContentExcludesCase;
+    private final java.util.List<TimeRangeTableModel.Entry> initialTimeIncludes;
+    private final java.util.List<TimeRangeTableModel.Entry> initialTimeExcludes;
     private boolean confirmed = false;
     private boolean includeAllMode; // Standard ist false, explizite Initialisierung entfernt
     // Modus für Inhalts-Filter: ob alle Filter passen müssen
     private boolean contentIncludeAllMode; // Standard ist false
     private boolean timeIncludeAllMode; // eigener Modus für Zeitfilter
 
-    public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase, boolean initialIncludeAllMode, Map<String, Boolean> initialContentIncludes, Map<String, Boolean> initialContentExcludes, Map<String, Boolean> initialContentIncludesCase, Map<String, Boolean> initialContentExcludesCase, boolean initialContentIncludeAllMode) {
+    public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase, boolean initialIncludeAllMode, Map<String, Boolean> initialContentIncludes, Map<String, Boolean> initialContentExcludes, Map<String, Boolean> initialContentIncludesCase, Map<String, Boolean> initialContentExcludesCase, boolean initialContentIncludeAllMode, java.util.List<TimeRangeTableModel.Entry> initialTimeIncludes, java.util.List<TimeRangeTableModel.Entry> initialTimeExcludes, boolean initialTimeIncludeAllMode) {
         super(owner, GuiConstants.FILTERS_DIALOG_TITLE, true);
         this.initialExtensionsAllow = initialExtensionsAllow == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsAllow);
         this.initialExtensionsDeny = initialExtensionsDeny == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsDeny);
@@ -62,11 +64,15 @@ public class FiltersDialog extends JDialog {
         this.initialContentExcludes = initialContentExcludes == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentExcludes);
         this.initialContentIncludesCase = initialContentIncludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentIncludesCase);
         this.initialContentExcludesCase = initialContentExcludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentExcludesCase);
+        this.initialTimeIncludes = initialTimeIncludes == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(initialTimeIncludes);
+        this.initialTimeExcludes = initialTimeExcludes == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(initialTimeExcludes);
         this.includeAllMode = initialIncludeAllMode;
         this.contentIncludeAllMode = initialContentIncludeAllMode;
+        this.timeIncludeAllMode = initialTimeIncludeAllMode;
 
         populateFilters(initialIncludes, initialExcludes);
         populateContentFilters(this.initialContentIncludes, this.initialContentExcludes);
+        populateTimeFilters(this.initialTimeIncludes, this.initialTimeExcludes);
         // Zeitwerte können später hinzugefügt werden - aktuell keine initialen TimeRanges geladen
         applyCaseFlags();
         applyContentCaseFlags();
@@ -120,6 +126,23 @@ public class FiltersDialog extends JDialog {
                 String t = k.trim();
                 if (t.isEmpty()) continue;
                 excludesContentModel.addEntry(t, enabled);
+            }
+        }
+    }
+
+    // Populate initial time filter entries into the TimeRangeTableModel instances
+    private void populateTimeFilters(java.util.List<TimeRangeTableModel.Entry> inc, java.util.List<TimeRangeTableModel.Entry> exc) {
+        if (inc != null) {
+            for (TimeRangeTableModel.Entry e : inc) {
+                if (e == null) continue;
+                // TimeRangeTableModel.addEntry expects (Date start, Date end, Mode mode, boolean enabled)
+                includesTimeModel.addEntry(e.start, e.end, e.mode, e.enabled);
+            }
+        }
+        if (exc != null) {
+            for (TimeRangeTableModel.Entry e : exc) {
+                if (e == null) continue;
+                excludesTimeModel.addEntry(e.start, e.end, e.mode, e.enabled);
             }
         }
     }
@@ -755,5 +778,10 @@ public class FiltersDialog extends JDialog {
     // Getter für Inhaltsmodus
     public boolean isContentIncludeAllMode() {
         return contentIncludeAllMode;
+    }
+
+    // Getter für den Modus der Zeitfilter (any/all)
+    public boolean isTimeIncludeAllMode() {
+        return timeIncludeAllMode;
     }
 }
