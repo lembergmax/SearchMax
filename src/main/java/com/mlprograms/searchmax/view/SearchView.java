@@ -6,6 +6,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -129,6 +131,21 @@ public final class SearchView extends JFrame {
         bindModel();
         loadSettings();
 
+        // Autosave on key UI changes so settings persist exactly as configured
+        topPanel.getQueryField().getDocument().addDocumentListener(new DocumentListener() {
+            private void onChange() { saveExtensionsToSettings(); }
+            @Override public void insertUpdate(DocumentEvent e) { onChange(); }
+            @Override public void removeUpdate(DocumentEvent e) { onChange(); }
+            @Override public void changedUpdate(DocumentEvent e) { onChange(); }
+        });
+        topPanel.getFolderField().getDocument().addDocumentListener(new DocumentListener() {
+            private void onChange() { saveExtensionsToSettings(); }
+            @Override public void insertUpdate(DocumentEvent e) { onChange(); }
+            @Override public void removeUpdate(DocumentEvent e) { onChange(); }
+            @Override public void changedUpdate(DocumentEvent e) { onChange(); }
+        });
+        topPanel.getCaseSensitiveCheck().addActionListener(e -> saveExtensionsToSettings());
+
         bottomPanel.getPerformanceModeCheck().addActionListener(e -> {
             useAllCores = bottomPanel.getPerformanceModeCheck().isSelected();
             controller.setUseAllCores(useAllCores);
@@ -218,6 +235,7 @@ public final class SearchView extends JFrame {
             final File selected = jFileChooser.getSelectedFile();
             if (selected != null && selected.isDirectory()) {
                 topPanel.getFolderField().setText(selected.getAbsolutePath());
+                saveExtensionsToSettings();
             }
         }
     }
@@ -267,6 +285,8 @@ public final class SearchView extends JFrame {
                 } catch (Exception e) {
                     log.warn("Fehler beim Setzen des ExtractionMode", e);
                 }
+                // persist selection immediately
+                saveExtensionsToSettings();
             }
         } catch (Exception ex) {
             log.warn("Fehler beim Öffnen der Settings", ex);
@@ -462,6 +482,10 @@ public final class SearchView extends JFrame {
     /**
      * Speichert die aktuellen Filter- und Sucheinstellungen in einer Properties-Datei.
      */
+    public void saveSettings() {
+        saveExtensionsToSettings();
+    }
+
     private void saveExtensionsToSettings() {
         try {
             final Properties properties = new Properties();
