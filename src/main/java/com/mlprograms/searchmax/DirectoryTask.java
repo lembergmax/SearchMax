@@ -30,6 +30,14 @@ import java.nio.file.attribute.BasicFileAttributes;
 @RequiredArgsConstructor
 public final class DirectoryTask extends RecursiveAction {
 
+    private static class FilterEntity {
+
+        String pattern;
+        boolean caseSensitive;
+        String patternKey;
+
+    }
+
     private static final Set<String> SYSTEM_DIR_NAMES = new HashSet<>(Arrays.asList("system volume information", "$recycle.bin", "found.000", "recycler"));
     private static final int CHUNK_SIZE = 64;
     private final Path directoryPath;
@@ -41,8 +49,8 @@ public final class DirectoryTask extends RecursiveAction {
     private final AtomicBoolean cancelled;
     private final Consumer<String> emitter;
     private final boolean caseSensitive;
-    private final List<String> allowedExtensions;
-    private final List<String> deniedExtensions;
+    private final List<String> allowedFileExtensions;
+    private final List<String> deniedFileExtensions;
     private final List<String> includeFilters;
     private final Map<String, Boolean> includeCaseMap;
     private final List<String> excludeFilters;
@@ -70,8 +78,8 @@ public final class DirectoryTask extends RecursiveAction {
             final Consumer<String> emitter,
             final AtomicBoolean cancelled,
             final boolean caseSensitive,
-            final List<String> allowedExtensions,
-            final List<String> deniedExtensions,
+            final List<String> allowedFileExtensions,
+            final List<String> deniedFileExtensions,
             final List<String> includeFilters,
             final Map<String, Boolean> includeCaseMap,
             final List<String> excludeFilters,
@@ -97,8 +105,8 @@ public final class DirectoryTask extends RecursiveAction {
         this.cancelled = (cancelled == null) ? new AtomicBoolean(false) : cancelled;
         this.caseSensitive = caseSensitive;
 
-        this.allowedExtensions = (allowedExtensions == null || allowedExtensions.isEmpty()) ? null : new ArrayList<>(allowedExtensions);
-        this.deniedExtensions = (deniedExtensions == null || deniedExtensions.isEmpty()) ? null : new ArrayList<>(deniedExtensions);
+        this.allowedFileExtensions = (allowedFileExtensions == null || allowedFileExtensions.isEmpty()) ? null : new ArrayList<>(allowedFileExtensions);
+        this.deniedFileExtensions = (deniedFileExtensions == null || deniedFileExtensions.isEmpty()) ? null : new ArrayList<>(deniedFileExtensions);
         this.includeFilters = (includeFilters == null || includeFilters.isEmpty()) ? null : new ArrayList<>(includeFilters);
         this.includeCaseMap = (includeCaseMap == null || includeCaseMap.isEmpty()) ? null : new HashMap<>(includeCaseMap);
         this.excludeFilters = (excludeFilters == null || excludeFilters.isEmpty()) ? null : new ArrayList<>(excludeFilters);
@@ -169,37 +177,6 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
-    private boolean isSystemDirectory(final Path path) {
-        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
-            return false;
-        }
-
-        final Path fileName = path.getFileName();
-        if (fileName == null) {
-            return false;
-        }
-
-        final String name = fileName.toString().toLowerCase(Locale.ROOT);
-        return SYSTEM_DIR_NAMES.contains(name) || name.startsWith("windows");
-    }
-
-    private boolean isCancelledOrInvalid() {
-        boolean isDirectory = Files.isDirectory(directoryPath);
-        boolean isThreadInterrupted = Thread.currentThread().isInterrupted();
-        boolean isTaskCancelled = cancelled != null && cancelled.get();
-        return isThreadInterrupted || isTaskCancelled || !isDirectory;
-    }
-
-
-// =============================================================
-// NOT REFACTORED
-// =============================================================
-
-
-    private DirectoryTask createSubtask(Path subDir) {
-        return new DirectoryTask(subDir, result, matchCount, null, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode, timeIncludeRanges, timeExcludeRanges, timeIncludeAllMode, extractionMode);
-    }
-
     private void processFile(final Path filePath) {
         if (isCancelledOrInvalid()) {
             return;
@@ -245,23 +222,159 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
-    private boolean matchesExtensions(final String fileName) {
-        final String lower = fileName.toLowerCase(Locale.ROOT);
+    private boolean isSystemDirectory(final Path path) {
+        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+            return false;
+        }
 
-        if (deniedExtensions != null) {
-            for (String extension : deniedExtensions) {
-                if (extension != null && !extension.isEmpty() && lower.endsWith(extension)) {
+        final Path fileName = path.getFileName();
+        if (fileName == null) {
+            return false;
+        }
+
+        final String name = fileName.toString().toLowerCase(Locale.ROOT);
+        return SYSTEM_DIR_NAMES.contains(name) || name.startsWith("windows");
+    }
+
+    private boolean isCancelledOrInvalid() {
+        boolean isDirectory = Files.isDirectory(directoryPath);
+        boolean isThreadInterrupted = Thread.currentThread().isInterrupted();
+        boolean isTaskCancelled = cancelled != null && cancelled.get();
+        return isThreadInterrupted || isTaskCancelled || !isDirectory;
+    }
+
+    private boolean matchesQuery(final String fileName) {
+        if (query == null || query.isEmpty()) {
+            return true;
+        }
+
+        if (fileName == null) {
+            return false;
+        }
+
+        if (caseSensitive) {
+            return fileName.contains(query);
+        }
+
+        return fileName.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT));
+    }
+
+    private boolean matchesIncludeFilters(final String fileName) {
+        if (includeFilters == null || includeFilters.isEmpty()) {
+            return true;
+        }
+
+        final String base = stripExtension(fileName);
+        return matchesFilters(base, includeFilters, includeCaseMap, includeAllMode);
+    }
+
+    private boolean matchesExcludeFilters(final String fileName) {
+        if (excludeFilters == null || excludeFilters.isEmpty()) {
+            return false;
+        }
+
+        final String base = stripExtension(fileName);
+        return matchesFilters(base, excludeFilters, excludeCaseMap, false);
+    }
+
+    private String stripExtension(final String fileName) {
+        if (fileName == null) {
+            return "";
+        }
+
+        int lastIndexOfDot = fileName.lastIndexOf('.');
+        if (lastIndexOfDot <= 0) {
+            return fileName;
+        }
+
+        return fileName.substring(0, lastIndexOfDot);
+    }
+
+    private boolean matchesFilters(final String nameToCheck, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
+        if (filters == null || filters.isEmpty()) {
+            return false;
+        }
+
+        if (requireAll) {
+            for (String filter : filters) {
+                if (filter == null || filter.isEmpty()) {
+                    continue;
+                }
+
+                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
+                boolean matched = caseSensitiveFilter ? nameToCheck.contains(filter) : nameToCheck.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
+                if (!matched) {
+                    return false;
+                }
+            }
+
+            return true;
+        } else {
+            for (final String filter : filters) {
+                if (filter == null || filter.isEmpty()) {
+                    continue;
+                }
+
+                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
+                if (caseSensitiveFilter) {
+                    return nameToCheck.contains(filter);
+                } else {
+                    return nameToCheck.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
+                }
+            }
+
+            return false;
+        }
+    }
+
+    private DirectoryTask createSubtask(final Path subDir) {
+        return new DirectoryTask(
+                subDir,
+                result,
+                matchCount,
+                null,
+                query,
+                startTimeNano,
+                emitter,
+                cancelled,
+                caseSensitive,
+                allowedFileExtensions,
+                deniedFileExtensions,
+                includeFilters,
+                includeCaseMap,
+                excludeFilters,
+                excludeCaseMap,
+                includeAllMode,
+                contentIncludeFilters,
+                contentIncludeCaseMap,
+                contentExcludeFilters,
+                contentExcludeCaseMap,
+                contentIncludeAllMode,
+                timeIncludeRanges,
+                timeExcludeRanges,
+                timeIncludeAllMode,
+                extractionMode
+        );
+    }
+
+    private boolean matchesExtensions(final String fileName) {
+        final String lowerInLowercase = fileName.toLowerCase(Locale.ROOT);
+
+        if (deniedFileExtensions != null) {
+            for (final String deniedFileExtension : deniedFileExtensions) {
+                if (deniedFileExtension != null && !deniedFileExtension.isEmpty() && lowerInLowercase.endsWith(deniedFileExtension)) {
                     return false;
                 }
             }
         }
 
-        if (allowedExtensions != null) {
-            for (String extension : allowedExtensions) {
-                if (extension != null && !extension.isEmpty() && lower.endsWith(extension)) {
+        if (allowedFileExtensions != null) {
+            for (final String allowedFileExtension : allowedFileExtensions) {
+                if (allowedFileExtension != null && !allowedFileExtension.isEmpty() && lowerInLowercase.endsWith(allowedFileExtension)) {
                     return true;
                 }
             }
+
             return false;
         }
 
@@ -269,14 +382,18 @@ public final class DirectoryTask extends RecursiveAction {
     }
 
     private String formatFileResult(final Path filePath) {
-        final long elapsedNanos = System.nanoTime() - startTimeNano;
-        final long centis = elapsedNanos / 10_000_000L;
-        final long whole = centis / 100L;
-        final int cents = (int) (centis % 100L);
+        final long elapsedNanosSinceStart = System.nanoTime() - startTimeNano;
+        final long elapsedCentiseconds = elapsedNanosSinceStart / 10_000_000L;
+        final long seconds = elapsedCentiseconds / 100L;
+        final int centiseconds = (int) (elapsedCentiseconds % 100L);
 
-        final String pathString = filePath.toAbsolutePath().toString();
-        return String.format("[%d.%02ds] %s", whole, cents, pathString);
+        final String absolutePath = filePath.toAbsolutePath().toString();
+        return String.format("[%d.%02ds] %s", seconds, centiseconds, absolutePath);
     }
+
+// =============================================================
+// NOT REFACTORED
+// =============================================================
 
     private boolean matchesContentFilters(final Path filePath) {
         if ((contentIncludeFilters == null || contentIncludeFilters.isEmpty()) && (contentExcludeFilters == null || contentExcludeFilters.isEmpty())) {
@@ -298,12 +415,6 @@ public final class DirectoryTask extends RecursiveAction {
         } catch (final Exception exception) {
             return true;
         }
-    }
-
-    private static class FilterEntity {
-        String pattern;
-        boolean caseSensitive;
-        String patternKey;
     }
 
     private boolean matchesContentStreamFilters(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
@@ -638,56 +749,6 @@ public final class DirectoryTask extends RecursiveAction {
     private boolean allMatched(final boolean[] matched) {
         for (boolean m : matched) if (!m) return false;
         return true;
-    }
-
-    private boolean matchesQuery(final String fileName) {
-        if (query == null || query.isEmpty()) return true;
-        if (fileName == null) return false;
-        if (caseSensitive) return fileName.contains(query);
-        return fileName.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT));
-    }
-
-    private boolean matchesIncludeFilters(final String fileName) {
-        if (includeFilters == null || includeFilters.isEmpty()) return true;
-        String base = stripExtension(fileName);
-        return matchesFilters(base, includeFilters, includeCaseMap, includeAllMode);
-    }
-
-    private boolean matchesExcludeFilters(final String fileName) {
-        if (excludeFilters == null || excludeFilters.isEmpty()) return false;
-        String base = stripExtension(fileName);
-        return matchesFilters(base, excludeFilters, excludeCaseMap, false);
-    }
-
-    private boolean matchesFilters(final String nameToCheck, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
-        if (filters == null || filters.isEmpty()) return false;
-        if (requireAll) {
-            for (String filter : filters) {
-                if (filter == null || filter.isEmpty()) continue;
-                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
-                boolean matched = caseSensitiveFilter ? nameToCheck.contains(filter) : nameToCheck.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
-                if (!matched) return false;
-            }
-            return true;
-        } else {
-            for (String filter : filters) {
-                if (filter == null || filter.isEmpty()) continue;
-                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
-                if (caseSensitiveFilter) {
-                    if (nameToCheck.contains(filter)) return true;
-                } else {
-                    if (nameToCheck.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT))) return true;
-                }
-            }
-            return false;
-        }
-    }
-
-    private String stripExtension(String fileName) {
-        if (fileName == null) return "";
-        int idx = fileName.lastIndexOf('.');
-        if (idx <= 0) return fileName;
-        return fileName.substring(0, idx);
     }
 
 }
