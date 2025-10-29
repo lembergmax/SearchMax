@@ -407,15 +407,11 @@ public final class SearchView extends JFrame {
             knownExtensionsDeny.clear();
             knownExtensionsDeny.putAll(extensionsDeny);
 
-            // Zeitfilter übernehmen (nur aktivierte Einträge)
+            // Zeitfilter übernehmen: alle Einträge (inkl. deaktivierter) übernehmen, damit sie persistiert werden können
             knownTimeIncludes.clear();
-            for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry en : filtersDialog.getTimeIncludes()) {
-                if (en.enabled) knownTimeIncludes.add(en);
-            }
+            knownTimeIncludes.addAll(filtersDialog.getTimeIncludes());
             knownTimeExcludes.clear();
-            for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry en : filtersDialog.getTimeExcludes()) {
-                if (en.enabled) knownTimeExcludes.add(en);
-            }
+            knownTimeExcludes.addAll(filtersDialog.getTimeExcludes());
             knownTimeIncludesAllMode = filtersDialog.isTimeIncludeAllMode();
 
             knownIncludesAllMode = filtersDialog.isIncludeAllMode();
