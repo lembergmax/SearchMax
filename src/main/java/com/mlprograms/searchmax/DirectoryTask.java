@@ -142,7 +142,10 @@ public final class DirectoryTask extends RecursiveAction {
     private final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludeRanges;
     private final boolean timeIncludeAllMode;
 
-    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode, final List<String> contentIncludeFilters, final Map<String, Boolean> contentIncludeCaseMap, final List<String> contentExcludeFilters, final Map<String, Boolean> contentExcludeCaseMap, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludeRanges, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludeRanges, final boolean timeIncludeAllMode, final ExtractionMode extractionMode) {
+    // Optionaler Verweis auf den Remaining-Tasks Zähler des SearchHandle (nur für root-tasks gesetzt)
+    private final AtomicInteger remainingTasks;
+
+    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final AtomicInteger remainingTasks, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode, final List<String> contentIncludeFilters, final Map<String, Boolean> contentIncludeCaseMap, final List<String> contentExcludeFilters, final Map<String, Boolean> contentExcludeCaseMap, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludeRanges, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludeRanges, final boolean timeIncludeAllMode, final ExtractionMode extractionMode) {
         this.directoryPath = directoryPath;
         this.result = (result == null) ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -170,6 +173,7 @@ public final class DirectoryTask extends RecursiveAction {
         this.timeExcludeRanges = (timeExcludeRanges == null || timeExcludeRanges.isEmpty()) ? null : new java.util.ArrayList<>(timeExcludeRanges);
         this.timeIncludeAllMode = timeIncludeAllMode;
         this.extractionMode = extractionMode == null ? ExtractionMode.POI_THEN_TIKA : extractionMode;
+        this.remainingTasks = remainingTasks;
     }
 
     /**
@@ -178,44 +182,55 @@ public final class DirectoryTask extends RecursiveAction {
      */
     @Override
     protected void compute() {
-        if (isCancelledOrInvalid()) {
-            return;
-        }
-
-        final List<DirectoryTask> subtasks = new ArrayList<>(8);
-        try (final DirectoryStream<Path> stream = Files.newDirectoryStream(directoryPath)) {
-            for (final Path entry : stream) {
-                if (isCancelledOrInvalid()) {
-                    return;
-                }
-
-                try {
-                    if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-                        if (isSystemDirectory(entry)) {
-                            continue;
-                        }
-
-                        subtasks.add(createSubtask(entry));
-                        if (subtasks.size() >= CHUNK_SIZE) {
-                            invokeAll(new ArrayList<>(subtasks));
-                            subtasks.clear();
-                        }
-
-                    } else if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
-                        processFile(entry);
-                    }
-
-                } catch (final SecurityException securityException) {
-                    log.debug("Zugriff verweigert für Eintrag: {}", entry, securityException);
-                }
+        try {
+            if (isCancelledOrInvalid()) {
+                return;
             }
 
-        } catch (final IOException ioException) {
-            log.debug("Kann Verzeichnis nicht lesen: {} - {}", directoryPath, ioException.getMessage());
-        }
+            final List<DirectoryTask> subtasks = new ArrayList<>(8);
+            try (final DirectoryStream<Path> stream = Files.newDirectoryStream(directoryPath)) {
+                for (final Path entry : stream) {
+                    if (isCancelledOrInvalid()) {
+                        return;
+                    }
 
-        if (!subtasks.isEmpty()) {
-            invokeAll(subtasks);
+                    try {
+                        if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
+                            if (isSystemDirectory(entry)) {
+                                continue;
+                            }
+
+                            subtasks.add(createSubtask(entry));
+                            if (subtasks.size() >= CHUNK_SIZE) {
+                                invokeAll(new ArrayList<>(subtasks));
+                                subtasks.clear();
+                            }
+
+                        } else if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
+                            processFile(entry);
+                        }
+
+                    } catch (final SecurityException securityException) {
+                        log.debug("Zugriff verweigert für Eintrag: {}", entry, securityException);
+                    }
+                }
+
+            } catch (final IOException ioException) {
+                log.debug("Kann Verzeichnis nicht lesen: {} - {}", directoryPath, ioException.getMessage());
+            }
+
+            if (!subtasks.isEmpty()) {
+                invokeAll(subtasks);
+            }
+        } finally {
+            // Wenn dieser Task ein Root-Task ist (received remainingTasks von SearchHandle), dekrementiere den Zähler
+            try {
+                if (this.remainingTasks != null) {
+                    this.remainingTasks.decrementAndGet();
+                }
+            } catch (Throwable t) {
+                // ignore
+            }
         }
     }
 
@@ -235,7 +250,8 @@ public final class DirectoryTask extends RecursiveAction {
      * @return Neuer DirectoryTask für das Unterverzeichnis
      */
     private DirectoryTask createSubtask(Path subDir) {
-        return new DirectoryTask(subDir, result, matchCount, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode, timeIncludeRanges, timeExcludeRanges, timeIncludeAllMode, extractionMode);
+        // Subtasks erhalten bewusst keinen remainingTasks-Zähler (nur Root-Tasks vom Service setzen diesen)
+        return new DirectoryTask(subDir, result, matchCount, null, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode, timeIncludeRanges, timeExcludeRanges, timeIncludeAllMode, extractionMode);
     }
 
     /**
