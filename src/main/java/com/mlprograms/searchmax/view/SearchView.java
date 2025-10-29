@@ -623,6 +623,10 @@ public final class SearchView extends JFrame {
             parseFilterString(allow, knownExtensionsAllow);
             final String deny = properties.getProperty("extensionsDeny", "").trim();
             parseFilterString(deny, knownExtensionsDeny);
+            // Ensure no extension appears in both Allow and Deny. Deny wins.
+            if (!knownExtensionsDeny.isEmpty()) {
+                knownExtensionsAllow.keySet().removeAll(knownExtensionsDeny.keySet());
+            }
 
             final String contentIncludes = properties.getProperty("contentIncludes", "").trim();
             parseFilterString(contentIncludes, knownContentIncludes);

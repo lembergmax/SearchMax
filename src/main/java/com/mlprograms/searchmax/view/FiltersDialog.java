@@ -10,6 +10,8 @@ import com.github.lgooddatepicker.components.DatePicker;
 import com.github.lgooddatepicker.components.TimePicker;
 
 import javax.swing.*;
+import javax.swing.event.TableModelEvent;
+import javax.swing.event.TableModelListener;
 import java.awt.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -370,12 +372,16 @@ public class FiltersDialog extends JDialog {
                 if (idx == 0) {
                     if (allowModel.contains(t)) {
                         JOptionPane.showMessageDialog(this, GuiConstants.MSG_EXTENSION_EXISTS, GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
+                    } else if (denyModel.contains(t)) {
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_EXTENSION_CONFLICT, GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
                     } else {
                         allowModel.add(t, true);
                     }
                 } else {
                     if (denyModel.contains(t)) {
                         JOptionPane.showMessageDialog(this, GuiConstants.MSG_EXTENSION_EXISTS, GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
+                    } else if (allowModel.contains(t)) {
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_EXTENSION_CONFLICT, GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
                     } else {
                         denyModel.add(t, true);
                     }
@@ -400,12 +406,41 @@ public class FiltersDialog extends JDialog {
             }
         });
 
+        // Cross-list duplicate guard: ensure the same extension cannot exist in both Allow and Deny.
+        TableModelListener noDupListener = ev -> {
+            if (ev == null) return;
+            if (ev.getType() == TableModelEvent.UPDATE || ev.getType() == TableModelEvent.INSERT) {
+                java.util.Set<String> allowSet = new java.util.HashSet<>();
+                for (ExtensionsTableModelBase.Entry en : allowModel.getEntries()) allowSet.add(en.ext);
+                for (ExtensionsTableModelBase.Entry en : denyModel.getEntries()) {
+                    if (allowSet.contains(en.ext)) {
+                        // Deny wins: remove from allow and notify
+                        for (int i = allowModel.getEntries().size() - 1; i >= 0; i--) {
+                            if (allowModel.getEntries().get(i).ext.equals(en.ext)) {
+                                allowModel.removeAt(i);
+                            }
+                        }
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_EXTENSION_CONFLICT, GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
+                        break;
+                    }
+                }
+            }
+        };
+        allowModel.addTableModelListener(noDupListener);
+        denyModel.addTableModelListener(noDupListener);
+
         // Wichtig: Supplier so setzen, dass sie die aktuellen Einträge der Table-Modelle in Map-Form zurückgeben.
         this.extensionsAllowGetter = () -> {
             java.util.Map<String, Boolean> out = new LinkedHashMap<>();
             for (ExtensionsTableModelBase.Entry en : allowModel.getEntries()) {
                 out.put(en.ext, en.enabled);
             }
+            // remove any keys that also appear in deny list (deny has priority)
+            java.util.Set<String> denySet = new java.util.HashSet<>();
+            for (ExtensionsTableModelBase.Entry en : denyModel.getEntries()) {
+                denySet.add(en.ext);
+            }
+            out.keySet().removeAll(denySet);
             return out;
         };
 

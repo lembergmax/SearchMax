@@ -50,6 +50,7 @@ public final class GuiConstants {
     public static final String EXT_PANEL_TITLE = "File type";
     public static final String INPUT_NEW_EXTENSION = "New file type (e.g. .txt):";
     public static final String MSG_EXTENSION_EXISTS = "Extension already exists.";
+    public static final String MSG_EXTENSION_CONFLICT = "Extension cannot be both Allow and Exclude.";
     public static final String MSG_ERROR_TITLE = "Error";
 
     public static final String BUTTON_OK = "OK";
