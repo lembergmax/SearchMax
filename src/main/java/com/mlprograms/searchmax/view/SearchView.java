@@ -334,7 +334,13 @@ public final class SearchView extends JFrame {
         filterActiveEntries(contentExcludes, contentExcludesCase, knownContentExcludes, knownContentExcludesCase);
 
         if (!selectedDrives.isEmpty()) {
-            boolean hasAnyFilter = !(query == null || query.trim().isEmpty()) || !extensionsAllow.isEmpty() || !includes.isEmpty() || !contentIncludes.isEmpty() || !contentExcludes.isEmpty() || !(knownTimeIncludes == null || knownTimeIncludes.isEmpty()) || !(knownTimeExcludes == null || knownTimeExcludes.isEmpty());
+            boolean hasAnyFilter = !(query == null || query.trim().isEmpty())
+                    || !extensionsAllow.isEmpty()
+                    || !includes.isEmpty()
+                    || !contentIncludes.isEmpty()
+                    || !contentExcludes.isEmpty()
+                    || hasActiveTimeFilter(knownTimeIncludes)
+                    || hasActiveTimeFilter(knownTimeExcludes);
             if (!hasAnyFilter) {
                 JOptionPane.showMessageDialog(this, GuiConstants.MSG_ENTER_QUERY_OR_TYPE, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
                 return;
@@ -347,7 +353,13 @@ public final class SearchView extends JFrame {
             JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_START_FOLDER, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
             return;
         }
-        boolean hasAnyFilter = !(query == null || query.trim().isEmpty()) || !extensionsAllow.isEmpty() || !includes.isEmpty() || !contentIncludes.isEmpty() || !contentExcludes.isEmpty() || !(knownTimeIncludes == null || knownTimeIncludes.isEmpty()) || !(knownTimeExcludes == null || knownTimeExcludes.isEmpty());
+        boolean hasAnyFilter = !(query == null || query.trim().isEmpty())
+                || !extensionsAllow.isEmpty()
+                || !includes.isEmpty()
+                || !contentIncludes.isEmpty()
+                || !contentExcludes.isEmpty()
+                || hasActiveTimeFilter(knownTimeIncludes)
+                || hasActiveTimeFilter(knownTimeExcludes);
         if (!hasAnyFilter) {
             JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_QUERY_OR_TYPE_OR_FILTER, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
             return;
@@ -763,6 +775,17 @@ public final class SearchView extends JFrame {
                 }
             }
         }
+    }
+
+    /**
+     * Prüft, ob mindestens ein aktiver Zeitfilter (enabled==true) in der Liste enthalten ist.
+     */
+    private boolean hasActiveTimeFilter(List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> list) {
+        if (list == null || list.isEmpty()) return false;
+        for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry entry : list) {
+            if (entry != null && entry.enabled) return true;
+        }
+        return false;
     }
 
 }
