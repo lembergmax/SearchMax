@@ -1,5 +1,6 @@
 package com.mlprograms.searchmax;
 
+import com.mlprograms.searchmax.model.TimeRangeTableModel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -24,110 +25,28 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.nio.file.attribute.BasicFileAttributes;
 
-/**
- * Durchsucht ein Verzeichnis rekursiv nach Dateien, die bestimmten Filterkriterien entsprechen.
- * Unterstützt parallele Verarbeitung durch Fork/Join-Framework.
- * <p>
- * Filterkriterien umfassen:
- * - Dateinamen-Query (mit/ohne Groß-/Kleinschreibung)
- * - erlaubte/ausgeschlossene Dateiendungen
- * - Include-/Exclude-Filter mit optionaler Case-Sensitivity
- * <p>
- * Ergebnisse werden in einer Collection gesammelt und optional an einen Consumer übergeben.
- */
 @Slf4j
 @Getter
 @RequiredArgsConstructor
 public final class DirectoryTask extends RecursiveAction {
 
-    /**
-     * Namen von Systemverzeichnissen, die übersprungen werden sollen.
-     */
     private static final Set<String> SYSTEM_DIR_NAMES = new HashSet<>(Arrays.asList("system volume information", "$recycle.bin", "found.000", "recycler"));
-
-    /**
-     * Maximale Anzahl an Subtasks, bevor invokeAll aufgerufen wird.
-     */
     private static final int CHUNK_SIZE = 64;
-
-    /**
-     * Das zu durchsuchende Verzeichnis.
-     */
     private final Path directoryPath;
-
-    /**
-     * Sammlung für gefundene Ergebnisse.
-     */
     private final Collection<String> result;
-
-    /**
-     * Zähler für Treffer.
-     */
     private final AtomicInteger matchCount;
-
-    /**
-     * Suchbegriff für Dateinamen.
-     */
     private final String query;
-
-    /**
-     * Länge des Suchbegriffs.
-     */
     private final int queryLength;
-
-    /**
-     * Startzeitpunkt der Suche (nanoTime).
-     */
     private final long startTimeNano;
-
-    /**
-     * Optionaler Consumer für gefundene Ergebnisse.
-     */
-    private final Consumer<String> emitter;
-
-    /**
-     * Abbruch-Flag.
-     */
     private final AtomicBoolean cancelled;
-
-    /**
-     * Groß-/Kleinschreibung bei Suche beachten.
-     */
+    private final Consumer<String> emitter;
     private final boolean caseSensitive;
-
-    /**
-     * Liste erlaubter Dateiendungen.
-     */
     private final List<String> allowedExtensions;
-
-    /**
-     * Liste ausgeschlossener Dateiendungen.
-     */
     private final List<String> deniedExtensions;
-
-    /**
-     * Liste von Include-Filtern.
-     */
     private final List<String> includeFilters;
-
-    /**
-     * Case-Sensitivity-Map für Include-Filter.
-     */
     private final Map<String, Boolean> includeCaseMap;
-
-    /**
-     * Liste von Exclude-Filtern.
-     */
     private final List<String> excludeFilters;
-
-    /**
-     * Case-Sensitivity-Map für Exclude-Filter.
-     */
     private final Map<String, Boolean> excludeCaseMap;
-
-    /**
-     * Ob alle Include-Filter erfüllt sein müssen (true) oder ob nur einer passen darf (false).
-     */
     private final boolean includeAllMode;
 
     private final List<String> contentIncludeFilters;
@@ -135,17 +54,39 @@ public final class DirectoryTask extends RecursiveAction {
     private final List<String> contentExcludeFilters;
     private final Map<String, Boolean> contentExcludeCaseMap;
     private final boolean contentIncludeAllMode;
-    // Extraction mode (POI only, Tika only, or POI then Tika fallback)
     private final ExtractionMode extractionMode;
-    // Zeitfilter
-    private final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludeRanges;
-    private final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludeRanges;
+    private final List<TimeRangeTableModel.Entry> timeIncludeRanges;
+    private final List<TimeRangeTableModel.Entry> timeExcludeRanges;
     private final boolean timeIncludeAllMode;
-
-    // Optionaler Verweis auf den Remaining-Tasks Zähler des SearchHandle (nur für root-tasks gesetzt)
     private final AtomicInteger remainingTasks;
 
-    public DirectoryTask(final Path directoryPath, final Collection<String> result, final AtomicInteger matchCount, final AtomicInteger remainingTasks, final String query, final long startTimeNano, final Consumer<String> emitter, final AtomicBoolean cancelled, final boolean caseSensitive, final List<String> allowedExtensions, final List<String> deniedExtensions, final List<String> includeFilters, final Map<String, Boolean> includeCaseMap, final List<String> excludeFilters, final Map<String, Boolean> excludeCaseMap, final boolean includeAllMode, final List<String> contentIncludeFilters, final Map<String, Boolean> contentIncludeCaseMap, final List<String> contentExcludeFilters, final Map<String, Boolean> contentExcludeCaseMap, final boolean contentIncludeAllMode, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeIncludeRanges, final java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> timeExcludeRanges, final boolean timeIncludeAllMode, final ExtractionMode extractionMode) {
+    public DirectoryTask(
+            final Path directoryPath,
+            final Collection<String> result,
+            final AtomicInteger matchCount,
+            final AtomicInteger remainingTasks,
+            final String query,
+            final long startTimeNano,
+            final Consumer<String> emitter,
+            final AtomicBoolean cancelled,
+            final boolean caseSensitive,
+            final List<String> allowedExtensions,
+            final List<String> deniedExtensions,
+            final List<String> includeFilters,
+            final Map<String, Boolean> includeCaseMap,
+            final List<String> excludeFilters,
+            final Map<String, Boolean> excludeCaseMap,
+            final boolean includeAllMode,
+            final List<String> contentIncludeFilters,
+            final Map<String, Boolean> contentIncludeCaseMap,
+            final List<String> contentExcludeFilters,
+            final Map<String, Boolean> contentExcludeCaseMap,
+            final boolean contentIncludeAllMode,
+            final List<TimeRangeTableModel.Entry> timeIncludeRanges,
+            final List<TimeRangeTableModel.Entry> timeExcludeRanges,
+            final boolean timeIncludeAllMode,
+            final ExtractionMode extractionMode
+    ) {
         this.directoryPath = directoryPath;
         this.result = (result == null) ? new ConcurrentLinkedQueue<>() : result;
         this.matchCount = matchCount;
@@ -176,10 +117,6 @@ public final class DirectoryTask extends RecursiveAction {
         this.remainingTasks = remainingTasks;
     }
 
-    /**
-     * Startet die rekursive Verarbeitung des Verzeichnisses.
-     * Erstellt Subtasks für Unterverzeichnisse und verarbeitet Dateien.
-     */
     @Override
     protected void compute() {
         try {
@@ -188,31 +125,13 @@ public final class DirectoryTask extends RecursiveAction {
             }
 
             final List<DirectoryTask> subtasks = new ArrayList<>(8);
-            try (final DirectoryStream<Path> stream = Files.newDirectoryStream(directoryPath)) {
-                for (final Path entry : stream) {
+            try (final DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directoryPath)) {
+                for (final Path fileOrFolderPath : directoryStream) {
                     if (isCancelledOrInvalid()) {
                         return;
                     }
 
-                    try {
-                        if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-                            if (isSystemDirectory(entry)) {
-                                continue;
-                            }
-
-                            subtasks.add(createSubtask(entry));
-                            if (subtasks.size() >= CHUNK_SIZE) {
-                                invokeAll(new ArrayList<>(subtasks));
-                                subtasks.clear();
-                            }
-
-                        } else if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
-                            processFile(entry);
-                        }
-
-                    } catch (final SecurityException securityException) {
-                        log.debug("Zugriff verweigert für Eintrag: {}", entry, securityException);
-                    }
+                    processFilePath(fileOrFolderPath, subtasks);
                 }
 
             } catch (final IOException ioException) {
@@ -223,58 +142,64 @@ public final class DirectoryTask extends RecursiveAction {
                 invokeAll(subtasks);
             }
         } finally {
-            // Wenn dieser Task ein Root-Task ist (received remainingTasks von SearchHandle), dekrementiere den Zähler
-            try {
-                if (this.remainingTasks != null) {
-                    this.remainingTasks.decrementAndGet();
-                }
-            } catch (Throwable t) {
-                // ignore
+            if (this.remainingTasks != null) {
+                this.remainingTasks.decrementAndGet();
             }
         }
     }
 
-    /**
-     * Prüft, ob die Aufgabe abgebrochen wurde oder das Verzeichnis ungültig ist.
-     *
-     * @return true, wenn abgebrochen oder ungültig, sonst false
-     */
-    private boolean isCancelledOrInvalid() {
-        return Thread.currentThread().isInterrupted() || (cancelled != null && cancelled.get()) || directoryPath == null || !Files.isDirectory(directoryPath);
+    private void processFilePath(Path fileOrFolderPath, List<DirectoryTask> subtasks) {
+        try {
+            if (isSystemDirectory(fileOrFolderPath)) {
+                return;
+            }
+
+            if (Files.isRegularFile(fileOrFolderPath, LinkOption.NOFOLLOW_LINKS)) {
+                processFile(fileOrFolderPath);
+                return;
+            }
+
+            subtasks.add(createSubtask(fileOrFolderPath));
+            if (subtasks.size() >= CHUNK_SIZE) {
+                invokeAll(new ArrayList<>(subtasks));
+                subtasks.clear();
+            }
+        } catch (final SecurityException securityException) {
+            log.debug("Zugriff verweigert für Eintrag: {}", fileOrFolderPath, securityException);
+        }
     }
 
-    /**
-     * Erstellt einen neuen Subtask für ein Unterverzeichnis.
-     *
-     * @param subDir Das Unterverzeichnis
-     * @return Neuer DirectoryTask für das Unterverzeichnis
-     */
-    private DirectoryTask createSubtask(Path subDir) {
-        // Subtasks erhalten bewusst keinen remainingTasks-Zähler (nur Root-Tasks vom Service setzen diesen)
-        return new DirectoryTask(subDir, result, matchCount, null, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode, timeIncludeRanges, timeExcludeRanges, timeIncludeAllMode, extractionMode);
-    }
-
-    /**
-     * Prüft, ob ein Verzeichnis als Systemverzeichnis gilt und übersprungen werden soll.
-     *
-     * @param path Zu prüfender Pfad
-     * @return true, wenn Systemverzeichnis, sonst false
-     */
     private boolean isSystemDirectory(final Path path) {
-        final Path namePath = path.getFileName();
-        if (namePath == null) {
+        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
             return false;
         }
 
-        final String name = namePath.toString().toLowerCase(Locale.ROOT);
+        final Path fileName = path.getFileName();
+        if (fileName == null) {
+            return false;
+        }
+
+        final String name = fileName.toString().toLowerCase(Locale.ROOT);
         return SYSTEM_DIR_NAMES.contains(name) || name.startsWith("windows");
     }
 
-    /**
-     * Prüft und verarbeitet eine Datei, falls sie den Filterkriterien entspricht.
-     *
-     * @param filePath Pfad zur Datei
-     */
+    private boolean isCancelledOrInvalid() {
+        boolean isDirectory = Files.isDirectory(directoryPath);
+        boolean isThreadInterrupted = Thread.currentThread().isInterrupted();
+        boolean isTaskCancelled = cancelled != null && cancelled.get();
+        return isThreadInterrupted || isTaskCancelled || !isDirectory;
+    }
+
+
+// =============================================================
+// NOT REFACTORED
+// =============================================================
+
+
+    private DirectoryTask createSubtask(Path subDir) {
+        return new DirectoryTask(subDir, result, matchCount, null, query, startTimeNano, emitter, cancelled, caseSensitive, allowedExtensions, deniedExtensions, includeFilters, includeCaseMap, excludeFilters, excludeCaseMap, includeAllMode, contentIncludeFilters, contentIncludeCaseMap, contentExcludeFilters, contentExcludeCaseMap, contentIncludeAllMode, timeIncludeRanges, timeExcludeRanges, timeIncludeAllMode, extractionMode);
+    }
+
     private void processFile(final Path filePath) {
         if (isCancelledOrInvalid()) {
             return;
@@ -320,16 +245,6 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
-    /**
-     * Prüft, ob der Dateiname mit einer erlaubten oder ausgeschlossenen Dateiendung übereinstimmt.
-     * <p>
-     * - Gibt false zurück, wenn die Dateiendung in der Liste der ausgeschlossenen Endungen enthalten ist.
-     * - Gibt true zurück, wenn die Dateiendung in der Liste der erlaubten Endungen enthalten ist.
-     * - Gibt true zurück, wenn keine Listen gesetzt sind oder keine Einschränkung zutrifft.
-     *
-     * @param fileName Der zu prüfende Dateiname
-     * @return true, wenn die Dateiendung erlaubt ist, sonst false
-     */
     private boolean matchesExtensions(final String fileName) {
         final String lower = fileName.toLowerCase(Locale.ROOT);
 
@@ -353,12 +268,6 @@ public final class DirectoryTask extends RecursiveAction {
         return true;
     }
 
-    /**
-     * Formatiert das Suchergebnis einer Datei als String mit Zeitstempel.
-     *
-     * @param filePath Pfad zur gefundenen Datei
-     * @return Formatierter String mit Zeitangabe und Dateipfad
-     */
     private String formatFileResult(final Path filePath) {
         final long elapsedNanos = System.nanoTime() - startTimeNano;
         final long centis = elapsedNanos / 10_000_000L;
@@ -369,17 +278,6 @@ public final class DirectoryTask extends RecursiveAction {
         return String.format("[%d.%02ds] %s", whole, cents, pathString);
     }
 
-    /**
-     * Prüft, ob der Inhalt einer Datei die definierten Content-Filter (Include/Exclude) erfüllt.
-     * <p>
-     * - Gibt true zurück, wenn keine Content-Filter gesetzt sind.
-     * - Gibt false zurück, wenn ein Exclude-Filter zutrifft.
-     * - Gibt true/false je nach Ergebnis der Include-Filter-Prüfung zurück.
-     * - Bei Fehlern (z.B. Datei nicht lesbar) wird true zurückgegeben, um die Suche nicht zu blockieren.
-     *
-     * @param filePath Pfad zur zu prüfenden Datei
-     * @return true, wenn die Datei die Content-Filter erfüllt oder keine Filter gesetzt sind, sonst false
-     */
     private boolean matchesContentFilters(final Path filePath) {
         if ((contentIncludeFilters == null || contentIncludeFilters.isEmpty()) && (contentExcludeFilters == null || contentExcludeFilters.isEmpty())) {
             return true;
@@ -402,25 +300,12 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
-    /**
-     * Repräsentiert einen Filter mit zugehörigem Pattern, Case-Sensitivity und dem Schlüssel für den Vergleich.
-     */
     private static class FilterEntity {
         String pattern;
         boolean caseSensitive;
         String patternKey;
     }
 
-    /**
-     * Prüft, ob der Inhalt der Datei die angegebenen Filter erfüllt.
-     * Liest die Datei blockweise und sucht nach den Filter-Strings unter Berücksichtigung der Groß-/Kleinschreibung.
-     *
-     * @param filePath   Pfad zur zu prüfenden Datei
-     * @param filters    Liste der Filter-Strings
-     * @param caseMap    Map, die für jeden Filter angibt, ob Groß-/Kleinschreibung beachtet werden soll
-     * @param requireAll true, wenn alle Filter erfüllt sein müssen; false, wenn einer genügt
-     * @return true, wenn die Filterbedingungen erfüllt sind, sonst false
-     */
     private boolean matchesContentStreamFilters(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
         // Spezialfall: PDF-Dateien mit PDFBox seitenweise extrahieren (speicherschonend)
         final String nameLower = filePath.getFileName().toString().toLowerCase(Locale.ROOT);
@@ -471,10 +356,6 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
-    /**
-     * Extrahiert PDF-Text seitenweise und prüft die Filter auf jedem Seiten-Chunk.
-     * Verwendet MemoryUsageSetting.setupTempFileOnly() um OutOfMemory zu vermeiden.
-     */
     @SneakyThrows
     private boolean matchesPdfContent(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
         List<FilterEntity> filterList = buildFilterEntities(filters, caseMap);
@@ -531,10 +412,6 @@ public final class DirectoryTask extends RecursiveAction {
         }
     }
 
-    /**
-     * Extrahiert Text mit Apache POI (ExtractorFactory) und prüft die Filter.
-     * Die Methode ist robust gegenüber Extraktionsfehlern und gibt false zurück, wenn keine Textextraktion möglich ist.
-     */
     private boolean searchOfficeFile(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
         if (filters == null || filters.isEmpty()) return false;
         List<FilterEntity> filterList = buildFilterEntities(filters, caseMap);
@@ -607,15 +484,11 @@ public final class DirectoryTask extends RecursiveAction {
         return requireAll ? allMatched(matched) : anyMatched(matched);
     }
 
-    // Apache Tika-based extraction helper
     private String extractTextWithTika(final Path filePath) throws Exception {
         org.apache.tika.Tika tika = new org.apache.tika.Tika();
         return tika.parseToString(filePath.toFile());
     }
 
-    /**
-     * Prüft, ob eine Datei die konfigurierten Zeitfilter erfüllt.
-     */
     private boolean matchesTimeFilters(final Path filePath) {
         if ((timeIncludeRanges == null || timeIncludeRanges.isEmpty()) && (timeExcludeRanges == null || timeExcludeRanges.isEmpty())) {
             return true;
@@ -712,7 +585,8 @@ public final class DirectoryTask extends RecursiveAction {
                 return false;
             }
         } catch (Exception e) {
-            if (log.isDebugEnabled()) log.debug("matchesTimeFilters - filesystem error for {}: {}", filePath, e.getMessage());
+            if (log.isDebugEnabled())
+                log.debug("matchesTimeFilters - filesystem error for {}: {}", filePath, e.getMessage());
             return true; // don't block search on filesystem errors
         }
     }
