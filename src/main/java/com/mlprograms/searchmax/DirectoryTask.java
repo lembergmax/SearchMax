@@ -627,13 +627,11 @@ public final class DirectoryTask extends RecursiveAction {
             try {
                 creationMillis = Files.readAttributes(filePath, BasicFileAttributes.class).creationTime().toMillis();
             } catch (Exception ex) {
-                // creationTime may not be available on all platforms; that's fine — fall back to lastModified only
                 creationMillis = null;
             }
 
             final java.time.ZoneId zone = java.time.ZoneId.systemDefault();
 
-            // predicate that checks whether a single timestamp matches an entry
             final java.util.function.BiPredicate<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry, Long> entryMatchesTimestamp = (r, ts) -> {
                 if (r == null || r.start == null || r.end == null || ts == null) return false;
                 switch (r.mode == null ? com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.DATETIME : r.mode) {
@@ -650,7 +648,6 @@ public final class DirectoryTask extends RecursiveAction {
                         if (!startTime.isAfter(endTime)) {
                             return !fileTime.isBefore(startTime) && !fileTime.isAfter(endTime);
                         } else {
-                            // wrap-around over midnight
                             return !fileTime.isBefore(startTime) || !fileTime.isAfter(endTime);
                         }
                     }
@@ -669,7 +666,7 @@ public final class DirectoryTask extends RecursiveAction {
                     log.debug("matchesTimeFilters - file={}, lastModified={}, creation={} , excludeEntries={}", filePath, lastModifiedMillis, creationMillis, timeExcludeRanges.size());
                 }
                 for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeExcludeRanges) {
-                    if (r == null) continue;
+                    if (r == null || !r.enabled) continue;
                     boolean lmMatch = entryMatchesTimestamp.test(r, lastModifiedMillis);
                     boolean crMatch = creationMillis != null && entryMatchesTimestamp.test(r, creationMillis);
                     if (log.isDebugEnabled()) {
@@ -685,12 +682,11 @@ public final class DirectoryTask extends RecursiveAction {
             }
 
             if (timeIncludeAllMode) {
-                // For every include entry, at least one of the timestamps must match
                 if (log.isDebugEnabled()) {
                     log.debug("matchesTimeFilters - ANY/ALL mode=ALL, file={}, lastModified={}, creation={}, includeEntries={}", filePath, lastModifiedMillis, creationMillis, timeIncludeRanges.size());
                 }
                 for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
-                    if (r == null) return false;
+                    if (r == null || !r.enabled) continue;
                     boolean lmMatch = entryMatchesTimestamp.test(r, lastModifiedMillis);
                     boolean crMatch = creationMillis != null && entryMatchesTimestamp.test(r, creationMillis);
                     if (log.isDebugEnabled()) {
@@ -701,12 +697,11 @@ public final class DirectoryTask extends RecursiveAction {
                 }
                 return true;
             } else {
-                // ANY mode: if any include entry matches any timestamp -> accept
                 if (log.isDebugEnabled()) {
                     log.debug("matchesTimeFilters - ANY/ALL mode=ANY, file={}, lastModified={}, creation={}, includeEntries={}", filePath, lastModifiedMillis, creationMillis, timeIncludeRanges.size());
                 }
                 for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
-                    if (r == null) continue;
+                    if (r == null || !r.enabled) continue;
                     boolean lmMatch = entryMatchesTimestamp.test(r, lastModifiedMillis);
                     boolean crMatch = creationMillis != null && entryMatchesTimestamp.test(r, creationMillis);
                     if (log.isDebugEnabled()) {
