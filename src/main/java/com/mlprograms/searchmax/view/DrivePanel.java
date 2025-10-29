@@ -23,7 +23,11 @@ public final class DrivePanel extends JPanel {
         for (int i = 0; i < roots.length; i++) {
             final JCheckBox box = new JCheckBox(roots[i].getPath());
             box.setSelected(false);
-            box.addActionListener(e -> this.parent.getTopPanel().updateFolderFieldState());
+            box.addActionListener(e -> {
+                this.parent.getTopPanel().updateFolderFieldState();
+                // Autosave when drive selection changes
+                this.parent.saveSettings();
+            });
             driveCheckBoxes[i] = box;
             add(box);
         }
