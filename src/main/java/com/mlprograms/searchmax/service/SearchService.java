@@ -242,6 +242,7 @@ public final class SearchService {
         final DirectoryTask task = new DirectoryTask(rootPath,
                 handle.getResults(),
                 handle.getMatchCount(),
+                handle.getRemainingTasks(), // pass remainingTasks so root-tasks can decrement when finished
                 queryText,
                 handle.getStartNano(),
                 (s) -> safeSendMatch(listener, s),
@@ -265,7 +266,6 @@ public final class SearchService {
                 extractionMode);
         // Register and submit
         handle.getTasks().add(task);
-        handle.getRemainingTasks().incrementAndGet();
         pool.submit(task);
     }
 
@@ -320,4 +320,3 @@ public final class SearchService {
         return null;
     }
 }
-

@@ -385,18 +385,37 @@ public class FiltersDialog extends JDialog {
 
         extEnableAll.addActionListener(e -> {
             int idx = tabs.getSelectedIndex();
-            if (idx == 0) allowModel.setAllEnabled(true);
-            else denyModel.setAllEnabled(true);
+            if (idx == 0) {
+                allowModel.setAllEnabled(true);
+            } else {
+                denyModel.setAllEnabled(true);
+            }
         });
         extDisableAll.addActionListener(e -> {
             int idx = tabs.getSelectedIndex();
-            if (idx == 0) allowModel.setAllEnabled(false);
-            else denyModel.setAllEnabled(false);
+            if (idx == 0) {
+                allowModel.setAllEnabled(false);
+            } else {
+                denyModel.setAllEnabled(false);
+            }
         });
 
-        this.extensionsAllowGetter = LinkedHashMap::new;
+        // Wichtig: Supplier so setzen, dass sie die aktuellen Einträge der Table-Modelle in Map-Form zurückgeben.
+        this.extensionsAllowGetter = () -> {
+            java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+            for (ExtensionsTableModelBase.Entry en : allowModel.getEntries()) {
+                out.put(en.ext, en.enabled);
+            }
+            return out;
+        };
 
-        this.extensionsDenyGetter = LinkedHashMap::new;
+        this.extensionsDenyGetter = () -> {
+            java.util.Map<String, Boolean> out = new LinkedHashMap<>();
+            for (ExtensionsTableModelBase.Entry en : denyModel.getEntries()) {
+                out.put(en.ext, en.enabled);
+            }
+            return out;
+        };
 
         return extPanel;
     }
