@@ -17,11 +17,11 @@ import java.util.Date;
 @Getter
 public class TimeRangeInputDialog extends JDialog {
 
-    private static final int DATE_PICKER_WIDTH = 280;
-    private static final int TIME_PICKER_WIDTH = 140;
+    private static final int DATE_PICKER_WIDTH = 260;
+    private static final int TIME_PICKER_WIDTH = 120;
     private static final int PICKER_HEIGHT = 28;
-    private static final int DIALOG_EXTRA_WIDTH = 240;
-    private static final int DIALOG_EXTRA_HEIGHT = 50;
+    private static final int DIALOG_EXTRA_WIDTH = 150;
+    private static final int DIALOG_EXTRA_HEIGHT = 40;
 
     private TimeRangeInputResult result = null;
 
@@ -164,9 +164,9 @@ public class TimeRangeInputDialog extends JDialog {
 
         // Adjust size to ensure proper visibility
         final Dimension preferredSize = getPreferredSize();
-        // Erhöhe die Mindestbreite und -höhe, damit die Date/Time-Picker genug Platz haben
-        final int minWidth = Math.max(720, preferredSize.width + DIALOG_EXTRA_WIDTH);
-        final int minHeight = Math.max(320, preferredSize.height + DIALOG_EXTRA_HEIGHT);
+        // Setze eine etwas kleinere Mindestbreite/-höhe für kompaktere Darstellung
+        final int minWidth = Math.max(540, preferredSize.width + DIALOG_EXTRA_WIDTH);
+        final int minHeight = Math.max(300, preferredSize.height + DIALOG_EXTRA_HEIGHT);
         setSize(minWidth, minHeight);
     }
 
