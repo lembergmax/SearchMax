@@ -175,11 +175,15 @@ public class TimeRangeInputDialog extends JDialog {
     }
 
     private void processInput(final JOptionPane optionPane) {
-        final JComboBox<String> modeComboBox = findComponentInPane(optionPane, JComboBox.class);
-        final DatePicker startDatePicker = findComponentInPane(optionPane, DatePicker.class);
-        final DatePicker endDatePicker = findComponentInPane(optionPane, DatePicker.class);
-        final TimePicker startTimePicker = findComponentInPane(optionPane, TimePicker.class);
-        final TimePicker endTimePicker = findComponentInPane(optionPane, TimePicker.class);
+        @SuppressWarnings("unchecked")
+        final JComboBox<String> modeComboBox = (JComboBox<String>) findComponentInPane(optionPane, JComboBox.class);
+        final java.util.List<DatePicker> datePickers = findComponentsInPane(optionPane, DatePicker.class);
+        final java.util.List<TimePicker> timePickers = findComponentsInPane(optionPane, TimePicker.class);
+
+        final DatePicker startDatePicker = !datePickers.isEmpty() ? datePickers.get(0) : null;
+        final DatePicker endDatePicker = datePickers.size() > 1 ? datePickers.get(1) : null;
+        final TimePicker startTimePicker = !timePickers.isEmpty() ? timePickers.get(0) : null;
+        final TimePicker endTimePicker = timePickers.size() > 1 ? timePickers.get(1) : null;
 
         if (modeComboBox != null && startDatePicker != null && endDatePicker != null &&
                 startTimePicker != null && endTimePicker != null) {
@@ -203,6 +207,20 @@ public class TimeRangeInputDialog extends JDialog {
             }
         }
         return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> java.util.List<T> findComponentsInPane(final Container container, final Class<T> componentClass) {
+        final java.util.List<T> result = new java.util.ArrayList<>();
+        for (final Component component : container.getComponents()) {
+            if (componentClass.isInstance(component)) {
+                result.add((T) component);
+            }
+            if (component instanceof Container) {
+                result.addAll(findComponentsInPane((Container) component, componentClass));
+            }
+        }
+        return result;
     }
 
     private TimeRangeInputResult createTimeRangeResult(final JComboBox<String> modeComboBox,
