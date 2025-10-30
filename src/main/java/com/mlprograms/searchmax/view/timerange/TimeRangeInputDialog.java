@@ -17,11 +17,11 @@ import java.util.Date;
 @Getter
 public class TimeRangeInputDialog extends JDialog {
 
-    private static final int DATE_PICKER_WIDTH = 220;
-    private static final int TIME_PICKER_WIDTH = 110;
+    private static final int DATE_PICKER_WIDTH = 280;
+    private static final int TIME_PICKER_WIDTH = 140;
     private static final int PICKER_HEIGHT = 28;
-    private static final int DIALOG_EXTRA_WIDTH = 250;
-    private static final int DIALOG_EXTRA_HEIGHT = 75;
+    private static final int DIALOG_EXTRA_WIDTH = 240;
+    private static final int DIALOG_EXTRA_HEIGHT = 50;
 
     private TimeRangeInputResult result = null;
 
@@ -70,11 +70,23 @@ public class TimeRangeInputDialog extends JDialog {
         final JPanel endPanel = createDateTimePanel(endDatePicker, endTimePicker);
 
         // Layout components
+        // Mode label (no horizontal expansion)
+        constraints.weightx = 0.0;
         addComponentToPanel(panel, modeLabel, constraints, 0, 0, 1, 1);
+        // Mode combo (expand)
+        constraints.weightx = 1.0;
         addComponentToPanel(panel, modeComboBox, constraints, 1, 0, 2, 1);
+        // From label (no expansion)
+        constraints.weightx = 0.0;
         addComponentToPanel(panel, new JLabel(GuiConstants.LABEL_FROM), constraints, 0, 1, 1, 1);
+        // Start panel (expand)
+        constraints.weightx = 1.0;
         addComponentToPanel(panel, startPanel, constraints, 1, 1, 2, 1);
+        // To label (no expansion)
+        constraints.weightx = 0.0;
         addComponentToPanel(panel, new JLabel(GuiConstants.LABEL_TO), constraints, 0, 2, 1, 1);
+        // End panel (expand)
+        constraints.weightx = 1.0;
         addComponentToPanel(panel, endPanel, constraints, 1, 2, 2, 1);
 
         // Setup mode change listener
@@ -152,9 +164,10 @@ public class TimeRangeInputDialog extends JDialog {
 
         // Adjust size to ensure proper visibility
         final Dimension preferredSize = getPreferredSize();
-        final int width = Math.max(preferredSize.width, 400);
-        final int height = Math.max(preferredSize.height, 300);
-        setSize(width, height);
+        // Erhöhe die Mindestbreite und -höhe, damit die Date/Time-Picker genug Platz haben
+        final int minWidth = Math.max(720, preferredSize.width + DIALOG_EXTRA_WIDTH);
+        final int minHeight = Math.max(320, preferredSize.height + DIALOG_EXTRA_HEIGHT);
+        setSize(minWidth, minHeight);
     }
 
     private void setupResultHandler(final JOptionPane optionPane) {
@@ -175,8 +188,7 @@ public class TimeRangeInputDialog extends JDialog {
     }
 
     private void processInput(final JOptionPane optionPane) {
-        @SuppressWarnings("unchecked")
-        final JComboBox<String> modeComboBox = (JComboBox<String>) findComponentInPane(optionPane, JComboBox.class);
+        @SuppressWarnings("unchecked") final JComboBox<String> modeComboBox = (JComboBox<String>) findComponentInPane(optionPane, JComboBox.class);
         final java.util.List<DatePicker> datePickers = findComponentsInPane(optionPane, DatePicker.class);
         final java.util.List<TimePicker> timePickers = findComponentsInPane(optionPane, TimePicker.class);
 
