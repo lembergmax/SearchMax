@@ -5,58 +5,63 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.poi.extractor.ExtractorFactory;
+import org.apache.poi.extractor.POITextExtractor;
 
 import java.io.IOException;
-import java.nio.file.*;
+import java.io.Reader;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.poi.extractor.ExtractorFactory;
-import org.apache.poi.extractor.POITextExtractor;
-
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.nio.file.attribute.BasicFileAttributes;
 
 @Slf4j
 @Getter
 @RequiredArgsConstructor
 public final class DirectoryTask extends RecursiveAction {
 
-    private static class FilterEntity {
-
-        String pattern;
-        boolean caseSensitive;
-        String patternKey;
-
+    private record FilterEntity(String pattern, boolean caseSensitive, String patternKey) {
     }
 
-    private static final Set<String> SYSTEM_DIR_NAMES = new HashSet<>(Arrays.asList("system volume information", "$recycle.bin", "found.000", "recycler"));
-    private static final int CHUNK_SIZE = 64;
+    private static final Set<String> SYSTEM_DIRECTORY_NAMES = Set.of(
+            "system volume information", "$recycle.bin", "found.000", "recycler"
+    );
+    private static final int DIRECTORY_CHUNK_SIZE = 64;
+    private static final int TEXT_BUFFER_SIZE = 8 * 1024;
+    private static final long NANOSECONDS_PER_CENTISECOND = 10_000_000L;
+
     private final Path directoryPath;
-    private final Collection<String> result;
+    private final Collection<String> searchResults;
     private final AtomicInteger matchCount;
-    private final String query;
-    private final int queryLength;
-    private final long startTimeNano;
-    private final AtomicBoolean cancelled;
-    private final Consumer<String> emitter;
-    private final boolean caseSensitive;
+    private final String searchQuery;
+    private final int searchQueryLength;
+    private final long searchStartTimeNano;
+    private final AtomicBoolean searchCancelled;
+    private final Consumer<String> resultEmitter;
+    private final boolean caseSensitiveSearch;
     private final List<String> allowedFileExtensions;
     private final List<String> deniedFileExtensions;
-    private final List<String> includeFilters;
-    private final Map<String, Boolean> includeCaseMap;
-    private final List<String> excludeFilters;
-    private final Map<String, Boolean> excludeCaseMap;
-    private final boolean includeAllMode;
-
+    private final List<String> filenameIncludeFilters;
+    private final Map<String, Boolean> filenameIncludeCaseMap;
+    private final List<String> filenameExcludeFilters;
+    private final Map<String, Boolean> filenameExcludeCaseMap;
+    private final boolean filenameIncludeAllMode;
     private final List<String> contentIncludeFilters;
     private final Map<String, Boolean> contentIncludeCaseMap;
     private final List<String> contentExcludeFilters;
@@ -70,21 +75,21 @@ public final class DirectoryTask extends RecursiveAction {
 
     public DirectoryTask(
             final Path directoryPath,
-            final Collection<String> result,
+            final Collection<String> searchResults,
             final AtomicInteger matchCount,
             final AtomicInteger remainingTasks,
-            final String query,
-            final long startTimeNano,
-            final Consumer<String> emitter,
-            final AtomicBoolean cancelled,
-            final boolean caseSensitive,
+            final String searchQuery,
+            final long searchStartTimeNano,
+            final Consumer<String> resultEmitter,
+            final AtomicBoolean searchCancelled,
+            final boolean caseSensitiveSearch,
             final List<String> allowedFileExtensions,
             final List<String> deniedFileExtensions,
-            final List<String> includeFilters,
-            final Map<String, Boolean> includeCaseMap,
-            final List<String> excludeFilters,
-            final Map<String, Boolean> excludeCaseMap,
-            final boolean includeAllMode,
+            final List<String> filenameIncludeFilters,
+            final Map<String, Boolean> filenameIncludeCaseMap,
+            final List<String> filenameExcludeFilters,
+            final Map<String, Boolean> filenameExcludeCaseMap,
+            final boolean filenameIncludeAllMode,
             final List<String> contentIncludeFilters,
             final Map<String, Boolean> contentIncludeCaseMap,
             final List<String> contentExcludeFilters,
@@ -96,67 +101,65 @@ public final class DirectoryTask extends RecursiveAction {
             final ExtractionMode extractionMode
     ) {
         this.directoryPath = directoryPath;
-        this.result = (result == null) ? new ConcurrentLinkedQueue<>() : result;
+        this.searchResults = Optional.ofNullable(searchResults).orElseGet(ConcurrentLinkedQueue::new);
         this.matchCount = matchCount;
-        this.query = (query == null) ? "" : query;
-        this.queryLength = this.query.length();
-        this.startTimeNano = startTimeNano;
-        this.emitter = emitter;
-        this.cancelled = (cancelled == null) ? new AtomicBoolean(false) : cancelled;
-        this.caseSensitive = caseSensitive;
-
-        this.allowedFileExtensions = (allowedFileExtensions == null || allowedFileExtensions.isEmpty()) ? null : new ArrayList<>(allowedFileExtensions);
-        this.deniedFileExtensions = (deniedFileExtensions == null || deniedFileExtensions.isEmpty()) ? null : new ArrayList<>(deniedFileExtensions);
-        this.includeFilters = (includeFilters == null || includeFilters.isEmpty()) ? null : new ArrayList<>(includeFilters);
-        this.includeCaseMap = (includeCaseMap == null || includeCaseMap.isEmpty()) ? null : new HashMap<>(includeCaseMap);
-        this.excludeFilters = (excludeFilters == null || excludeFilters.isEmpty()) ? null : new ArrayList<>(excludeFilters);
-        this.excludeCaseMap = (excludeCaseMap == null || excludeCaseMap.isEmpty()) ? null : new HashMap<>(excludeCaseMap);
-        this.includeAllMode = includeAllMode;
-
-        this.contentIncludeFilters = (contentIncludeFilters == null || contentIncludeFilters.isEmpty()) ? null : new ArrayList<>(contentIncludeFilters);
-        this.contentIncludeCaseMap = (contentIncludeCaseMap == null || contentIncludeCaseMap.isEmpty()) ? null : new HashMap<>(contentIncludeCaseMap);
-        this.contentExcludeFilters = (contentExcludeFilters == null || contentExcludeFilters.isEmpty()) ? null : new ArrayList<>(contentExcludeFilters);
-        this.contentExcludeCaseMap = (contentExcludeCaseMap == null || contentExcludeCaseMap.isEmpty()) ? null : new HashMap<>(contentExcludeCaseMap);
+        this.searchQuery = Optional.ofNullable(searchQuery).orElse("");
+        this.searchQueryLength = this.searchQuery.length();
+        this.searchStartTimeNano = searchStartTimeNano;
+        this.resultEmitter = resultEmitter;
+        this.searchCancelled = Optional.ofNullable(searchCancelled).orElseGet(() -> new AtomicBoolean(false));
+        this.caseSensitiveSearch = caseSensitiveSearch;
+        this.allowedFileExtensions = copyListIfNotEmpty(allowedFileExtensions);
+        this.deniedFileExtensions = copyListIfNotEmpty(deniedFileExtensions);
+        this.filenameIncludeFilters = copyListIfNotEmpty(filenameIncludeFilters);
+        this.filenameIncludeCaseMap = copyMapIfNotEmpty(filenameIncludeCaseMap);
+        this.filenameExcludeFilters = copyListIfNotEmpty(filenameExcludeFilters);
+        this.filenameExcludeCaseMap = copyMapIfNotEmpty(filenameExcludeCaseMap);
+        this.filenameIncludeAllMode = filenameIncludeAllMode;
+        this.contentIncludeFilters = copyListIfNotEmpty(contentIncludeFilters);
+        this.contentIncludeCaseMap = copyMapIfNotEmpty(contentIncludeCaseMap);
+        this.contentExcludeFilters = copyListIfNotEmpty(contentExcludeFilters);
+        this.contentExcludeCaseMap = copyMapIfNotEmpty(contentExcludeCaseMap);
         this.contentIncludeAllMode = contentIncludeAllMode;
-        this.timeIncludeRanges = (timeIncludeRanges == null || timeIncludeRanges.isEmpty()) ? null : new java.util.ArrayList<>(timeIncludeRanges);
-        this.timeExcludeRanges = (timeExcludeRanges == null || timeExcludeRanges.isEmpty()) ? null : new java.util.ArrayList<>(timeExcludeRanges);
+        this.timeIncludeRanges = copyListIfNotEmpty(timeIncludeRanges);
+        this.timeExcludeRanges = copyListIfNotEmpty(timeExcludeRanges);
         this.timeIncludeAllMode = timeIncludeAllMode;
-        this.extractionMode = extractionMode == null ? ExtractionMode.POI_THEN_TIKA : extractionMode;
+        this.extractionMode = Optional.ofNullable(extractionMode).orElse(ExtractionMode.POI_THEN_TIKA);
         this.remainingTasks = remainingTasks;
     }
 
     @Override
     protected void compute() {
         try {
-            if (isCancelledOrInvalid()) {
+            if (isSearchCancelledOrInvalidDirectory()) {
                 return;
             }
 
-            final List<DirectoryTask> subtasks = new ArrayList<>(8);
-            try (final DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directoryPath)) {
-                for (final Path fileOrFolderPath : directoryStream) {
-                    if (isCancelledOrInvalid()) {
-                        return;
-                    }
-
-                    processFilePath(fileOrFolderPath, subtasks);
-                }
-
-            } catch (final IOException ioException) {
-                log.debug("Kann Verzeichnis nicht lesen: {} - {}", directoryPath, ioException.getMessage());
-            }
+            final List<DirectoryTask> subtasks = new ArrayList<>(DIRECTORY_CHUNK_SIZE);
+            processDirectoryContents(subtasks);
 
             if (!subtasks.isEmpty()) {
                 invokeAll(subtasks);
             }
         } finally {
-            if (this.remainingTasks != null) {
-                this.remainingTasks.decrementAndGet();
-            }
+            decrementRemainingTasks();
         }
     }
 
-    private void processFilePath(Path fileOrFolderPath, List<DirectoryTask> subtasks) {
+    private void processDirectoryContents(final List<DirectoryTask> subtasks) {
+        try (final DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directoryPath)) {
+            for (final Path fileOrFolderPath : directoryStream) {
+                if (isSearchCancelledOrInvalidDirectory()) {
+                    return;
+                }
+                processFileSystemEntry(fileOrFolderPath, subtasks);
+            }
+        } catch (final IOException ioException) {
+            log.debug("Cannot read directory: {} - {}", directoryPath, ioException.getMessage());
+        }
+    }
+
+    private void processFileSystemEntry(final Path fileOrFolderPath, final List<DirectoryTask> subtasks) {
         try {
             if (isSystemDirectory(fileOrFolderPath)) {
                 return;
@@ -164,62 +167,559 @@ public final class DirectoryTask extends RecursiveAction {
 
             if (Files.isRegularFile(fileOrFolderPath, LinkOption.NOFOLLOW_LINKS)) {
                 processFile(fileOrFolderPath);
-                return;
-            }
-
-            subtasks.add(createSubtask(fileOrFolderPath));
-            if (subtasks.size() >= CHUNK_SIZE) {
-                invokeAll(new ArrayList<>(subtasks));
-                subtasks.clear();
+            } else {
+                addSubtaskForDirectory(fileOrFolderPath, subtasks);
             }
         } catch (final SecurityException securityException) {
-            log.debug("Zugriff verweigert für Eintrag: {}", fileOrFolderPath, securityException);
+            log.debug("Access denied for entry: {}", fileOrFolderPath, securityException);
+        }
+    }
+
+    private void addSubtaskForDirectory(final Path subdirectoryPath, final List<DirectoryTask> subtasks) {
+        subtasks.add(createSubtask(subdirectoryPath));
+        if (subtasks.size() >= DIRECTORY_CHUNK_SIZE) {
+            invokeAll(new ArrayList<>(subtasks));
+            subtasks.clear();
         }
     }
 
     private void processFile(final Path filePath) {
-        if (isCancelledOrInvalid()) {
+        if (isSearchCancelledOrInvalidDirectory()) {
             return;
         }
 
         final String fileName = filePath.getFileName().toString();
-        if (queryLength > 0 && fileName.length() < queryLength) {
+
+        if (!passesAllFileFilters(fileName, filePath)) {
             return;
         }
 
-        if (!matchesQuery(fileName)) {
-            return;
-        }
-        if (!matchesIncludeFilters(fileName)) {
-            return;
-        }
-        if (matchesExcludeFilters(fileName)) {
-            return;
-        }
-        if (!matchesExtensions(fileName)) {
-            return;
-        }
-        if (!matchesContentFilters(filePath)) {
-            return;
-        }
-        if (!matchesTimeFilters(filePath)) {
-            return;
+        addFileToResults(filePath);
+    }
+
+    private boolean passesAllFileFilters(final String fileName, final Path filePath) {
+        return hasSufficientLength(fileName) &&
+                matchesSearchQuery(fileName) &&
+                matchesFilenameIncludeFilters(fileName) &&
+                !matchesFilenameExcludeFilters(fileName) &&
+                matchesFileExtensionFilters(fileName) &&
+                matchesContentFilters(filePath) &&
+                matchesTimeFilters(filePath);
+    }
+
+    private boolean hasSufficientLength(final String fileName) {
+        return searchQueryLength == 0 || fileName.length() >= searchQueryLength;
+    }
+
+    private boolean matchesSearchQuery(final String fileName) {
+        if (searchQuery.isEmpty()) {
+            return true;
         }
 
-        final String formatted = formatFileResult(filePath);
-        result.add(formatted);
+        if (caseSensitiveSearch) {
+            return fileName.contains(searchQuery);
+        }
+
+        return fileName.toLowerCase(Locale.ROOT).contains(searchQuery.toLowerCase(Locale.ROOT));
+    }
+
+    private boolean matchesFilenameIncludeFilters(final String fileName) {
+        if (filenameIncludeFilters == null || filenameIncludeFilters.isEmpty()) {
+            return true;
+        }
+
+        final String filenameWithoutExtension = removeFileExtension(fileName);
+        return matchesFilters(filenameWithoutExtension, filenameIncludeFilters, filenameIncludeCaseMap, filenameIncludeAllMode);
+    }
+
+    private boolean matchesFilenameExcludeFilters(final String fileName) {
+        if (filenameExcludeFilters == null || filenameExcludeFilters.isEmpty()) {
+            return false;
+        }
+
+        final String filenameWithoutExtension = removeFileExtension(fileName);
+        return matchesFilters(filenameWithoutExtension, filenameExcludeFilters, filenameExcludeCaseMap, false);
+    }
+
+    private String removeFileExtension(final String fileName) {
+        if (fileName == null) {
+            return "";
+        }
+
+        final int lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex <= 0) {
+            return fileName;
+        }
+
+        return fileName.substring(0, lastDotIndex);
+    }
+
+    private boolean matchesFilters(final String textToCheck, final List<String> filters,
+                                   final Map<String, Boolean> caseSensitivityMap, final boolean requireAllMatches) {
+        if (filters == null || filters.isEmpty()) {
+            return false;
+        }
+
+        if (requireAllMatches) {
+            return filters.stream()
+                    .filter(Objects::nonNull)
+                    .filter(filter -> !filter.isEmpty())
+                    .allMatch(filter -> containsText(textToCheck, filter, caseSensitivityMap));
+        } else {
+            return filters.stream()
+                    .filter(Objects::nonNull)
+                    .filter(filter -> !filter.isEmpty())
+                    .anyMatch(filter -> containsText(textToCheck, filter, caseSensitivityMap));
+        }
+    }
+
+    private boolean containsText(final String text, final String searchText, final Map<String, Boolean> caseSensitivityMap) {
+        final boolean caseSensitive = caseSensitivityMap != null && Boolean.TRUE.equals(caseSensitivityMap.get(searchText));
+
+        if (caseSensitive) {
+            return text.contains(searchText);
+        } else {
+            return text.toLowerCase(Locale.ROOT).contains(searchText.toLowerCase(Locale.ROOT));
+        }
+    }
+
+    private boolean matchesFileExtensionFilters(final String fileName) {
+        final String fileNameLowercase = fileName.toLowerCase(Locale.ROOT);
+
+        if (deniedFileExtensions != null) {
+            final boolean hasDeniedExtension = deniedFileExtensions.stream()
+                    .filter(Objects::nonNull)
+                    .anyMatch(fileNameLowercase::endsWith);
+            if (hasDeniedExtension) {
+                return false;
+            }
+        }
+
+        if (allowedFileExtensions != null) {
+            return allowedFileExtensions.stream()
+                    .filter(Objects::nonNull)
+                    .anyMatch(fileNameLowercase::endsWith);
+        }
+
+        return true;
+    }
+
+    private boolean matchesContentFilters(final Path filePath) {
+        if (hasNoContentFilters()) {
+            return true;
+        }
+
+        try {
+            if (hasContentExcludeFilters() && matchesFileContent(filePath, contentExcludeFilters, contentExcludeCaseMap, false)) {
+                return false;
+            }
+
+            if (hasContentIncludeFilters()) {
+                return matchesFileContent(filePath, contentIncludeFilters, contentIncludeCaseMap, contentIncludeAllMode);
+            }
+
+            return true;
+        } catch (final Exception exception) {
+            log.debug("Content filter check failed for {}: {}", filePath, exception.getMessage());
+            return true;
+        }
+    }
+
+    private boolean hasNoContentFilters() {
+        return (contentIncludeFilters == null || contentIncludeFilters.isEmpty()) &&
+                (contentExcludeFilters == null || contentExcludeFilters.isEmpty());
+    }
+
+    private boolean hasContentIncludeFilters() {
+        return contentIncludeFilters != null && !contentIncludeFilters.isEmpty();
+    }
+
+    private boolean hasContentExcludeFilters() {
+        return contentExcludeFilters != null && !contentExcludeFilters.isEmpty();
+    }
+
+    private boolean matchesFileContent(final Path filePath, final List<String> filters,
+                                       final Map<String, Boolean> caseMap, final boolean requireAll) {
+        final String fileName = filePath.getFileName().toString().toLowerCase(Locale.ROOT);
+
+        if (fileName.endsWith(".pdf")) {
+            return matchesPdfContent(filePath, filters, caseMap, requireAll);
+        }
+
+        if (isOfficeDocument(fileName)) {
+            return searchOfficeDocumentContent(filePath, filters, caseMap, requireAll);
+        }
+
+        return searchTextFileContent(filePath, filters, caseMap, requireAll);
+    }
+
+    private boolean isOfficeDocument(final String fileNameLowercase) {
+        return fileNameLowercase.endsWith(".doc") || fileNameLowercase.endsWith(".docx") ||
+                fileNameLowercase.endsWith(".xls") || fileNameLowercase.endsWith(".xlsx") ||
+                fileNameLowercase.endsWith(".ppt") || fileNameLowercase.endsWith(".pptx") ||
+                fileNameLowercase.endsWith(".odt") || fileNameLowercase.endsWith(".ods") ||
+                fileNameLowercase.endsWith(".odp");
+    }
+
+    private boolean searchTextFileContent(final Path filePath, final List<String> filters,
+                                          final Map<String, Boolean> caseMap, final boolean requireAll) {
+        final List<FilterEntity> filterEntities = buildFilterEntities(filters, caseMap);
+        if (filterEntities.isEmpty()) {
+            return false;
+        }
+
+        final int maximumPatternLength = filterEntities.stream()
+                .mapToInt(filterEntity -> filterEntity.patternKey.length())
+                .max()
+                .orElse(0);
+
+        final boolean[] matchedFilters = new boolean[filterEntities.size()];
+
+        try (final Reader fileReader = Files.newBufferedReader(filePath)) {
+            return searchTextContent(fileReader, filterEntities, matchedFilters, maximumPatternLength, requireAll);
+        } catch (final Exception exception) {
+            log.debug("Text file content search failed for {}: {}", filePath, exception.getMessage());
+            return false;
+        }
+    }
+
+    private boolean searchTextContent(final Reader reader, final List<FilterEntity> filterEntities,
+                                      final boolean[] matchedFilters, final int maximumPatternLength,
+                                      final boolean requireAll) throws IOException {
+        final char[] buffer = new char[TEXT_BUFFER_SIZE];
+        final StringBuilder slidingWindow = new StringBuilder(Math.max(TEXT_BUFFER_SIZE, maximumPatternLength * 2));
+        int bytesRead;
+
+        while ((bytesRead = reader.read(buffer)) != -1) {
+            if (isSearchCancelledOrInvalidDirectory()) {
+                return false;
+            }
+
+            slidingWindow.append(buffer, 0, bytesRead);
+            updateMatchedFilters(slidingWindow, filterEntities, matchedFilters);
+
+            if (!requireAll && anyFilterMatched(matchedFilters)) {
+                return true;
+            }
+
+            trimSlidingWindow(slidingWindow, maximumPatternLength);
+        }
+
+        return requireAll ? allFiltersMatched(matchedFilters) : anyFilterMatched(matchedFilters);
+    }
+
+    @SneakyThrows
+    private boolean matchesPdfContent(final Path filePath, final List<String> filters,
+                                      final Map<String, Boolean> caseMap, final boolean requireAll) {
+        final List<FilterEntity> filterEntities = buildFilterEntities(filters, caseMap);
+        if (filterEntities.isEmpty()) {
+            return false;
+        }
+
+        final boolean[] matchedFilters = new boolean[filterEntities.size()];
+        final PDFTextStripper textStripper = new PDFTextStripper();
+
+        final Logger pdfRootLogger = Logger.getLogger("org.apache.pdfbox");
+        final Logger fontLogger = Logger.getLogger("org.apache.pdfbox.pdmodel.font.FileSystemFontProvider");
+        final Logger parserLogger = Logger.getLogger("org.apache.pdfbox.pdfparser.BaseParser");
+
+        final Level originalRootLevel = pdfRootLogger.getLevel();
+        final Level originalFontLevel = fontLogger.getLevel();
+        final Level originalParserLevel = parserLogger.getLevel();
+
+        try {
+            setPdfLoggingLevels(Level.SEVERE, pdfRootLogger, fontLogger, parserLogger);
+
+            try (final PDDocument document = Loader.loadPDF(filePath.toFile())) {
+                final int totalPages = document.getNumberOfPages();
+                for (int currentPage = 1; currentPage <= totalPages; currentPage++) {
+                    if (isSearchCancelledOrInvalidDirectory()) {
+                        return false;
+                    }
+
+                    textStripper.setStartPage(currentPage);
+                    textStripper.setEndPage(currentPage);
+                    final String pageText = textStripper.getText(document);
+
+                    if (pageText != null && !pageText.isEmpty()) {
+                        final StringBuilder textWindow = new StringBuilder(pageText);
+                        updateMatchedFilters(textWindow, filterEntities, matchedFilters);
+
+                        if (!requireAll && anyFilterMatched(matchedFilters)) {
+                            return true;
+                        }
+                    }
+                }
+
+                return requireAll ? allFiltersMatched(matchedFilters) : anyFilterMatched(matchedFilters);
+            }
+        } catch (final Exception exception) {
+            log.debug("PDF content extraction failed for {}: {}", filePath, exception.getMessage());
+            return false;
+        } finally {
+            restorePdfLoggingLevels(pdfRootLogger, fontLogger, parserLogger,
+                    originalRootLevel, originalFontLevel, originalParserLevel);
+        }
+    }
+
+    private void setPdfLoggingLevels(final Level level, final Logger... loggers) {
+        for (final Logger logger : loggers) {
+            logger.setLevel(level);
+        }
+    }
+
+    private void restorePdfLoggingLevels(final Logger pdfRootLogger, final Logger fontLogger,
+                                         final Logger parserLogger, final Level originalRootLevel,
+                                         final Level originalFontLevel, final Level originalParserLevel) {
+        pdfRootLogger.setLevel(originalRootLevel);
+        fontLogger.setLevel(originalFontLevel);
+        parserLogger.setLevel(originalParserLevel);
+    }
+
+    private boolean searchOfficeDocumentContent(final Path filePath, final List<String> filters,
+                                                final Map<String, Boolean> caseMap, final boolean requireAll) {
+        final List<FilterEntity> filterEntities = buildFilterEntities(filters, caseMap);
+        if (filterEntities.isEmpty()) {
+            return false;
+        }
+
+        return switch (extractionMode) {
+            case TIKA_ONLY -> extractWithTikaAndSearch(filePath, filterEntities, requireAll);
+            case POI_ONLY -> extractWithPoiAndSearch(filePath, filterEntities, requireAll);
+            default -> extractWithPoiThenTika(filePath, filterEntities, requireAll);
+        };
+    }
+
+    private boolean extractWithTikaAndSearch(final Path filePath, final List<FilterEntity> filterEntities,
+                                             final boolean requireAll) {
+        try {
+            final String extractedText = extractTextWithTika(filePath);
+            return searchInExtractedText(extractedText, filterEntities, requireAll);
+        } catch (final Exception exception) {
+            log.debug("Tika extraction failed for {}: {}", filePath, exception.getMessage());
+            return false;
+        }
+    }
+
+    private boolean extractWithPoiAndSearch(final Path filePath, final List<FilterEntity> filterEntities,
+                                            final boolean requireAll) {
+        try (final POITextExtractor textExtractor = ExtractorFactory.createExtractor(filePath.toFile())) {
+            final String extractedText = textExtractor.getText();
+            return searchInExtractedText(extractedText, filterEntities, requireAll);
+        } catch (final Exception exception) {
+            log.debug("POI extraction failed for {}: {}", filePath, exception.getMessage());
+            return false;
+        }
+    }
+
+    private boolean extractWithPoiThenTika(final Path filePath, final List<FilterEntity> filterEntities,
+                                           final boolean requireAll) {
+        try (final POITextExtractor textExtractor = ExtractorFactory.createExtractor(filePath.toFile())) {
+            final String extractedText = textExtractor.getText();
+            if (extractedText != null && !extractedText.isEmpty()) {
+                if (searchInExtractedText(extractedText, filterEntities, requireAll)) {
+                    return true;
+                }
+            }
+        } catch (final Exception exception) {
+            log.debug("POI extraction failed for {}: {}", filePath, exception.getMessage());
+        }
+
+        return extractWithTikaAndSearch(filePath, filterEntities, requireAll);
+    }
+
+    private String extractTextWithTika(final Path filePath) throws Exception {
+        final org.apache.tika.Tika tika = new org.apache.tika.Tika();
+        return tika.parseToString(filePath.toFile());
+    }
+
+    private boolean searchInExtractedText(final String textContent, final List<FilterEntity> filterEntities,
+                                          final boolean requireAll) {
+        if (textContent == null || textContent.isEmpty()) {
+            return false;
+        }
+
+        final boolean[] matchedFilters = new boolean[filterEntities.size()];
+        final int maximumPatternLength = filterEntities.stream()
+                .mapToInt(filterEntity -> filterEntity.patternKey.length())
+                .max()
+                .orElse(0);
+        final int windowSize = Math.max(TEXT_BUFFER_SIZE, maximumPatternLength * 2);
+
+        int currentPosition = 0;
+        while (currentPosition < textContent.length()) {
+            if (isSearchCancelledOrInvalidDirectory()) {
+                return false;
+            }
+
+            final int endPosition = Math.min(textContent.length(), currentPosition + windowSize);
+            final String textWindow = textContent.substring(currentPosition, endPosition);
+            final StringBuilder stringBuilder = new StringBuilder(textWindow);
+
+            updateMatchedFilters(stringBuilder, filterEntities, matchedFilters);
+
+            if (!requireAll && anyFilterMatched(matchedFilters)) {
+                return true;
+            }
+
+            currentPosition += Math.max(1, windowSize - maximumPatternLength);
+        }
+
+        return requireAll ? allFiltersMatched(matchedFilters) : anyFilterMatched(matchedFilters);
+    }
+
+    private boolean matchesTimeFilters(final Path filePath) {
+        if (hasNoTimeFilters()) {
+            return true;
+        }
+
+        try {
+            final long lastModifiedTimeMillis = Files.getLastModifiedTime(filePath).toMillis();
+            final Long creationTimeMillis = getFileCreationTime(filePath);
+
+            if (matchesTimeExcludeFilters(lastModifiedTimeMillis, creationTimeMillis)) {
+                return false;
+            }
+
+            return matchesTimeIncludeFilters(lastModifiedTimeMillis, creationTimeMillis);
+        } catch (final Exception exception) {
+            log.debug("Time filter check failed for {}: {}", filePath, exception.getMessage());
+            return true;
+        }
+    }
+
+    private boolean hasNoTimeFilters() {
+        return (timeIncludeRanges == null || timeIncludeRanges.isEmpty()) &&
+                (timeExcludeRanges == null || timeExcludeRanges.isEmpty());
+    }
+
+    private Long getFileCreationTime(final Path filePath) {
+        try {
+            return Files.readAttributes(filePath, BasicFileAttributes.class).creationTime().toMillis();
+        } catch (final Exception exception) {
+            return null;
+        }
+    }
+
+    private boolean matchesTimeExcludeFilters(final long lastModifiedTimeMillis, final Long creationTimeMillis) {
+        if (timeExcludeRanges == null || timeExcludeRanges.isEmpty()) {
+            return false;
+        }
+
+        logTimeFilterDebug("Exclude", lastModifiedTimeMillis, creationTimeMillis, timeExcludeRanges.size());
+
+        return timeExcludeRanges.stream()
+                .filter(Objects::nonNull)
+                .filter(TimeRangeTableModel.Entry::isEnabled)
+                .anyMatch(entry -> matchesTimeRange(entry, lastModifiedTimeMillis, creationTimeMillis));
+    }
+
+    private boolean matchesTimeIncludeFilters(final long lastModifiedTimeMillis, final Long creationTimeMillis) {
+        if (timeIncludeRanges == null || timeIncludeRanges.isEmpty()) {
+            return true;
+        }
+
+        logTimeFilterDebug("Include", lastModifiedTimeMillis, creationTimeMillis, timeIncludeRanges.size());
+
+        if (timeIncludeAllMode) {
+            return timeIncludeRanges.stream()
+                    .filter(Objects::nonNull)
+                    .filter(TimeRangeTableModel.Entry::isEnabled)
+                    .allMatch(entry -> matchesTimeRange(entry, lastModifiedTimeMillis, creationTimeMillis));
+        } else {
+            return timeIncludeRanges.stream()
+                    .filter(Objects::nonNull)
+                    .filter(TimeRangeTableModel.Entry::isEnabled)
+                    .anyMatch(entry -> matchesTimeRange(entry, lastModifiedTimeMillis, creationTimeMillis));
+        }
+    }
+
+    private boolean matchesTimeRange(final TimeRangeTableModel.Entry timeRange,
+                                     final long lastModifiedTimeMillis, final Long creationTimeMillis) {
+        final boolean lastModifiedMatches = matchesSingleTimeRange(timeRange, lastModifiedTimeMillis);
+        final boolean creationTimeMatches = creationTimeMillis != null && matchesSingleTimeRange(timeRange, creationTimeMillis);
+
+        log.debug("Time range match - mode: {}, start: {}, end: {} -> lastModified: {}, creation: {}",
+                timeRange.getMode(), timeRange.getStart(), timeRange.getEnd(),
+                lastModifiedMatches, creationTimeMatches);
+
+        return lastModifiedMatches || creationTimeMatches;
+    }
+
+    private boolean matchesSingleTimeRange(final TimeRangeTableModel.Entry timeRange, final long timestamp) {
+        if (timeRange == null || timeRange.getStart() == null || timeRange.getEnd() == null) {
+            return false;
+        }
+
+        final ZoneId systemZone = ZoneId.systemDefault();
+        final TimeRangeTableModel.Mode rangeMode = Optional.ofNullable(timeRange.getMode())
+                .orElse(TimeRangeTableModel.Mode.DATETIME);
+
+        return switch (rangeMode) {
+            case DATE -> matchesDateRange(timeRange, timestamp, systemZone);
+            case TIME -> matchesTimeRange(timeRange, timestamp, systemZone);
+            default -> matchesDateTimeRange(timeRange, timestamp);
+        };
+    }
+
+    private boolean matchesDateRange(final TimeRangeTableModel.Entry timeRange, final long timestamp, final ZoneId zone) {
+        final LocalDate fileDate = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate();
+        final LocalDate startDate = timeRange.getStart().toInstant().atZone(zone).toLocalDate();
+        final LocalDate endDate = timeRange.getEnd().toInstant().atZone(zone).toLocalDate();
+        return !fileDate.isBefore(startDate) && !fileDate.isAfter(endDate);
+    }
+
+    private boolean matchesTimeRange(final TimeRangeTableModel.Entry timeRange, final long timestamp, final ZoneId zone) {
+        final LocalTime fileTime = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalTime();
+        final LocalTime startTime = timeRange.getStart().toInstant().atZone(zone).toLocalTime();
+        final LocalTime endTime = timeRange.getEnd().toInstant().atZone(zone).toLocalTime();
+
+        if (!startTime.isAfter(endTime)) {
+            return !fileTime.isBefore(startTime) && !fileTime.isAfter(endTime);
+        } else {
+            return !fileTime.isBefore(startTime) || !fileTime.isAfter(endTime);
+        }
+    }
+
+    private boolean matchesDateTimeRange(final TimeRangeTableModel.Entry timeRange, final long timestamp) {
+        final long startTime = timeRange.getStart().getTime();
+        final long endTime = timeRange.getEnd().getTime();
+        return timestamp >= startTime && timestamp <= endTime;
+    }
+
+    private void logTimeFilterDebug(final String filterType, final long lastModifiedTimeMillis,
+                                    final Long creationTimeMillis, final int rangeCount) {
+        if (log.isDebugEnabled()) {
+            log.debug("Time filter check - type: {}, lastModified: {}, creation: {}, ranges: {}",
+                    filterType, lastModifiedTimeMillis, creationTimeMillis, rangeCount);
+        }
+    }
+
+    private void addFileToResults(final Path filePath) {
+        final String formattedResult = formatFileResult(filePath);
+        searchResults.add(formattedResult);
 
         if (matchCount != null) {
             matchCount.incrementAndGet();
         }
 
-        if (emitter != null) {
+        if (resultEmitter != null) {
             try {
-                emitter.accept(formatted);
+                resultEmitter.accept(formattedResult);
             } catch (final Exception exception) {
-                log.debug("Emitter-Consumer warf Ausnahme für Datei {}: {}", filePath, exception.getMessage());
+                log.debug("Result emitter failed for file {}: {}", filePath, exception.getMessage());
             }
         }
+    }
+
+    private String formatFileResult(final Path filePath) {
+        final long elapsedNanosSinceStart = System.nanoTime() - searchStartTimeNano;
+        final long elapsedCentiseconds = elapsedNanosSinceStart / NANOSECONDS_PER_CENTISECOND;
+        final long seconds = elapsedCentiseconds / 100L;
+        final int centiseconds = (int) (elapsedCentiseconds % 100L);
+
+        final String absolutePath = filePath.toAbsolutePath().toString();
+        return String.format("[%d.%02ds] %s", seconds, centiseconds, absolutePath);
     }
 
     private boolean isSystemDirectory(final Path path) {
@@ -232,119 +732,34 @@ public final class DirectoryTask extends RecursiveAction {
             return false;
         }
 
-        final String name = fileName.toString().toLowerCase(Locale.ROOT);
-        return SYSTEM_DIR_NAMES.contains(name) || name.startsWith("windows");
+        final String directoryName = fileName.toString().toLowerCase(Locale.ROOT);
+        return SYSTEM_DIRECTORY_NAMES.contains(directoryName) || directoryName.startsWith("windows");
     }
 
-    private boolean isCancelledOrInvalid() {
-        boolean isDirectory = Files.isDirectory(directoryPath);
-        boolean isThreadInterrupted = Thread.currentThread().isInterrupted();
-        boolean isTaskCancelled = cancelled != null && cancelled.get();
-        return isThreadInterrupted || isTaskCancelled || !isDirectory;
+    private boolean isSearchCancelledOrInvalidDirectory() {
+        return Thread.currentThread().isInterrupted() ||
+                (searchCancelled != null && searchCancelled.get()) ||
+                !Files.isDirectory(directoryPath);
     }
 
-    private boolean matchesQuery(final String fileName) {
-        if (query == null || query.isEmpty()) {
-            return true;
-        }
-
-        if (fileName == null) {
-            return false;
-        }
-
-        if (caseSensitive) {
-            return fileName.contains(query);
-        }
-
-        return fileName.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT));
-    }
-
-    private boolean matchesIncludeFilters(final String fileName) {
-        if (includeFilters == null || includeFilters.isEmpty()) {
-            return true;
-        }
-
-        final String base = stripExtension(fileName);
-        return matchesFilters(base, includeFilters, includeCaseMap, includeAllMode);
-    }
-
-    private boolean matchesExcludeFilters(final String fileName) {
-        if (excludeFilters == null || excludeFilters.isEmpty()) {
-            return false;
-        }
-
-        final String base = stripExtension(fileName);
-        return matchesFilters(base, excludeFilters, excludeCaseMap, false);
-    }
-
-    private String stripExtension(final String fileName) {
-        if (fileName == null) {
-            return "";
-        }
-
-        int lastIndexOfDot = fileName.lastIndexOf('.');
-        if (lastIndexOfDot <= 0) {
-            return fileName;
-        }
-
-        return fileName.substring(0, lastIndexOfDot);
-    }
-
-    private boolean matchesFilters(final String nameToCheck, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
-        if (filters == null || filters.isEmpty()) {
-            return false;
-        }
-
-        if (requireAll) {
-            for (String filter : filters) {
-                if (filter == null || filter.isEmpty()) {
-                    continue;
-                }
-
-                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
-                boolean matched = caseSensitiveFilter ? nameToCheck.contains(filter) : nameToCheck.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
-                if (!matched) {
-                    return false;
-                }
-            }
-
-            return true;
-        } else {
-            for (final String filter : filters) {
-                if (filter == null || filter.isEmpty()) {
-                    continue;
-                }
-
-                boolean caseSensitiveFilter = caseMap != null && Boolean.TRUE.equals(caseMap.get(filter));
-                if (caseSensitiveFilter) {
-                    return nameToCheck.contains(filter);
-                } else {
-                    return nameToCheck.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
-                }
-            }
-
-            return false;
-        }
-    }
-
-    private DirectoryTask createSubtask(final Path subDir) {
+    private DirectoryTask createSubtask(final Path subdirectory) {
         return new DirectoryTask(
-                subDir,
-                result,
+                subdirectory,
+                searchResults,
                 matchCount,
                 null,
-                query,
-                startTimeNano,
-                emitter,
-                cancelled,
-                caseSensitive,
+                searchQuery,
+                searchStartTimeNano,
+                resultEmitter,
+                searchCancelled,
+                caseSensitiveSearch,
                 allowedFileExtensions,
                 deniedFileExtensions,
-                includeFilters,
-                includeCaseMap,
-                excludeFilters,
-                excludeCaseMap,
-                includeAllMode,
+                filenameIncludeFilters,
+                filenameIncludeCaseMap,
+                filenameExcludeFilters,
+                filenameExcludeCaseMap,
+                filenameIncludeAllMode,
                 contentIncludeFilters,
                 contentIncludeCaseMap,
                 contentExcludeFilters,
@@ -357,397 +772,90 @@ public final class DirectoryTask extends RecursiveAction {
         );
     }
 
-    private boolean matchesExtensions(final String fileName) {
-        final String lowerInLowercase = fileName.toLowerCase(Locale.ROOT);
-
-        if (deniedFileExtensions != null) {
-            for (final String deniedFileExtension : deniedFileExtensions) {
-                if (deniedFileExtension != null && !deniedFileExtension.isEmpty() && lowerInLowercase.endsWith(deniedFileExtension)) {
-                    return false;
-                }
-            }
-        }
-
-        if (allowedFileExtensions != null) {
-            for (final String allowedFileExtension : allowedFileExtensions) {
-                if (allowedFileExtension != null && !allowedFileExtension.isEmpty() && lowerInLowercase.endsWith(allowedFileExtension)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return true;
-    }
-
-    private String formatFileResult(final Path filePath) {
-        final long elapsedNanosSinceStart = System.nanoTime() - startTimeNano;
-        final long elapsedCentiseconds = elapsedNanosSinceStart / 10_000_000L;
-        final long seconds = elapsedCentiseconds / 100L;
-        final int centiseconds = (int) (elapsedCentiseconds % 100L);
-
-        final String absolutePath = filePath.toAbsolutePath().toString();
-        return String.format("[%d.%02ds] %s", seconds, centiseconds, absolutePath);
-    }
-
-// =============================================================
-// NOT REFACTORED
-// =============================================================
-
-    private boolean matchesContentFilters(final Path filePath) {
-        if ((contentIncludeFilters == null || contentIncludeFilters.isEmpty()) && (contentExcludeFilters == null || contentExcludeFilters.isEmpty())) {
-            return true;
-        }
-
-        try {
-            if (contentExcludeFilters != null && !contentExcludeFilters.isEmpty()) {
-                if (matchesContentStreamFilters(filePath, contentExcludeFilters, contentExcludeCaseMap, false)) {
-                    return false;
-                }
-            }
-
-            if (contentIncludeFilters != null && !contentIncludeFilters.isEmpty()) {
-                return matchesContentStreamFilters(filePath, contentIncludeFilters, contentIncludeCaseMap, contentIncludeAllMode);
-            }
-
-            return true;
-        } catch (final Exception exception) {
-            return true;
+    private void decrementRemainingTasks() {
+        if (remainingTasks != null) {
+            remainingTasks.decrementAndGet();
         }
     }
 
-    private boolean matchesContentStreamFilters(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
-        // Spezialfall: PDF-Dateien mit PDFBox seitenweise extrahieren (speicherschonend)
-        final String nameLower = filePath.getFileName().toString().toLowerCase(Locale.ROOT);
-        if (nameLower.endsWith(".pdf")) {
-            return matchesPdfContent(filePath, filters, caseMap, requireAll);
-        }
+    private static <T> List<T> copyListIfNotEmpty(final List<T> originalList) {
+        return (originalList == null || originalList.isEmpty()) ? null : new ArrayList<>(originalList);
+    }
 
-        // Office- und OpenDocument-Formate: doc/docx/xls/xlsx/ppt/pptx/odt/ods/odp
-        if (nameLower.endsWith(".doc") || nameLower.endsWith(".docx") || nameLower.endsWith(".xls") || nameLower.endsWith(".xlsx") || nameLower.endsWith(".ppt") || nameLower.endsWith(".pptx") || nameLower.endsWith(".odt") || nameLower.endsWith(".ods") || nameLower.endsWith(".odp")) {
-            return searchOfficeFile(filePath, filters, caseMap, requireAll);
-        }
+    private static <K, V> Map<K, V> copyMapIfNotEmpty(final Map<K, V> originalMap) {
+        return (originalMap == null || originalMap.isEmpty()) ? null : new HashMap<>(originalMap);
+    }
+
+    private List<FilterEntity> buildFilterEntities(final List<String> filters, final Map<String, Boolean> caseSensitivityMap) {
         if (filters == null || filters.isEmpty()) {
-            return false;
+            return Collections.emptyList();
         }
 
-        List<FilterEntity> filterList = buildFilterEntities(filters, caseMap);
-        if (filterList.isEmpty()) {
-            return false;
-        }
-
-        final int maxLength = filterList.stream().mapToInt(filterEntity -> filterEntity.patternKey.length()).max().orElse(0);
-        final int bufferSize = 8 * 1024;
-        boolean[] matched = new boolean[filterList.size()];
-
-        try (final java.io.Reader reader = java.nio.file.Files.newBufferedReader(filePath)) {
-            final char[] buffer = new char[bufferSize];
-            int read;
-            final StringBuilder window = new StringBuilder(Math.max(bufferSize, maxLength * 2));
-
-            while ((read = reader.read(buffer)) != -1) {
-                if (isCancelledOrInvalid()) {
-                    return false;
-                }
-
-                window.append(buffer, 0, read);
-                updateMatchedFilters(window, filterList, matched);
-
-                if (!requireAll && anyMatched(matched)) {
-                    return true;
-                }
-
-                trimWindow(window, maxLength);
+        final List<FilterEntity> filterEntities = new ArrayList<>();
+        for (final String filter : filters) {
+            if (filter == null || filter.trim().isEmpty()) {
+                continue;
             }
 
-            return requireAll ? allMatched(matched) : anyMatched(matched);
-        } catch (final Exception exception) {
-            return false;
+            final String trimmedFilter = filter.trim();
+            final boolean caseSensitive = caseSensitivityMap != null && Boolean.TRUE.equals(caseSensitivityMap.get(trimmedFilter));
+            final String patternKey = caseSensitive ? trimmedFilter : trimmedFilter.toLowerCase(Locale.ROOT);
+
+            filterEntities.add(new FilterEntity(trimmedFilter, caseSensitive, patternKey));
         }
+        return filterEntities;
     }
 
-    @SneakyThrows
-    private boolean matchesPdfContent(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
-        List<FilterEntity> filterList = buildFilterEntities(filters, caseMap);
-        if (filterList.isEmpty()) {
-            return false;
-        }
+    private void updateMatchedFilters(final StringBuilder textWindow, final List<FilterEntity> filterEntities,
+                                      final boolean[] matchedFilters) {
+        String lowercaseWindow = null;
+        String normalWindow = null;
 
-        boolean[] matched = new boolean[filterList.size()];
-
-        final PDFTextStripper stripper = new PDFTextStripper();
-
-        final Logger root = Logger.getLogger("org.apache.pdfbox");
-        final Logger fontLogger = Logger.getLogger("org.apache.pdfbox.pdmodel.font.FileSystemFontProvider");
-        final Logger parserLogger = Logger.getLogger("org.apache.pdfbox.pdfparser.BaseParser");
-        final Level prevRoot = root.getLevel();
-        final Level prevFont = fontLogger.getLevel();
-        final Level prevParser = parserLogger.getLevel();
-        try {
-            root.setLevel(Level.SEVERE);
-            fontLogger.setLevel(Level.SEVERE);
-            parserLogger.setLevel(Level.SEVERE);
-
-            try (PDDocument doc = Loader.loadPDF(filePath.toFile())) {
-                final int pages = doc.getNumberOfPages();
-                for (int p = 1; p <= pages; p++) {
-                    if (isCancelledOrInvalid()) {
-                        return false;
-                    }
-
-                    stripper.setStartPage(p);
-                    stripper.setEndPage(p);
-                    String pageText = stripper.getText(doc);
-                    if (pageText == null || pageText.isEmpty()) {
-                        continue;
-                    }
-
-                    final StringBuilder window = new StringBuilder(pageText);
-                    updateMatchedFilters(window, filterList, matched);
-
-                    if (!requireAll && anyMatched(matched)) {
-                        return true;
-                    }
-                }
-
-                return requireAll ? allMatched(matched) : anyMatched(matched);
+        for (int i = 0; i < filterEntities.size(); i++) {
+            if (matchedFilters[i]) {
+                continue;
             }
-        } catch (final Exception e) {
-            log.debug("PDF parsing failed for {}: {}", filePath, e.getMessage());
-            return false;
-        } finally {
-            root.setLevel(prevRoot);
-            fontLogger.setLevel(prevFont);
-            parserLogger.setLevel(prevParser);
-        }
-    }
 
-    private boolean searchOfficeFile(final Path filePath, final List<String> filters, final Map<String, Boolean> caseMap, final boolean requireAll) {
-        if (filters == null || filters.isEmpty()) return false;
-        List<FilterEntity> filterList = buildFilterEntities(filters, caseMap);
-        if (filterList.isEmpty()) return false;
-
-        // Decide behavior based on extractionMode
-        switch (extractionMode) {
-            case TIKA_ONLY: {
-                try {
-                    String text = extractTextWithTika(filePath);
-                    return searchUsingTextString(text, filterList, requireAll);
-                } catch (Exception e) {
-                    log.debug("Tika extraction failed for {}: {}", filePath, e.getMessage());
-                    return false;
+            final FilterEntity filterEntity = filterEntities.get(i);
+            if (filterEntity.caseSensitive) {
+                if (normalWindow == null) {
+                    normalWindow = textWindow.toString();
                 }
-            }
-            case POI_ONLY: {
-                try (POITextExtractor extractor = ExtractorFactory.createExtractor(filePath.toFile())) {
-                    String text = extractor.getText();
-                    return searchUsingTextString(text, filterList, requireAll);
-                } catch (Exception e) {
-                    log.debug("POI extraction failed for {}: {}", filePath, e.getMessage());
-                    return false;
+                if (normalWindow.contains(filterEntity.patternKey)) {
+                    matchedFilters[i] = true;
                 }
-            }
-            case POI_THEN_TIKA:
-            default: {
-                // Try POI first
-                try (POITextExtractor extractor = ExtractorFactory.createExtractor(filePath.toFile())) {
-                    String text = extractor.getText();
-                    if (text != null && !text.isEmpty()) {
-                        if (searchUsingTextString(text, filterList, requireAll)) return true;
-                    }
-                } catch (Exception e) {
-                    log.debug("Office extraction with POI failed for {}: {}. Falling back to Apache Tika.", filePath, e.getMessage());
+            } else {
+                if (lowercaseWindow == null) {
+                    lowercaseWindow = textWindow.toString().toLowerCase(Locale.ROOT);
                 }
-
-                // Fallback to Tika
-                try {
-                    String text = extractTextWithTika(filePath);
-                    return searchUsingTextString(text, filterList, requireAll);
-                } catch (Exception ex) {
-                    log.debug("Tika extraction failed for {}: {}", filePath, ex.getMessage());
-                    return false;
+                if (lowercaseWindow.contains(filterEntity.patternKey)) {
+                    matchedFilters[i] = true;
                 }
             }
         }
     }
 
-    // Helper: search over a large text string using the existing windowed approach
-    private boolean searchUsingTextString(final String text, final List<FilterEntity> filterList, final boolean requireAll) {
-        if (text == null || text.isEmpty()) return false;
-        boolean[] matched = new boolean[filterList.size()];
-        final int maxPatternLen = filterList.stream().mapToInt(fe -> fe.patternKey.length()).max().orElse(0);
-        final int windowSize = Math.max(8 * 1024, maxPatternLen * 2);
-
-        int pos = 0;
-        while (pos < text.length()) {
-            if (isCancelledOrInvalid()) return false;
-            int end = Math.min(text.length(), pos + windowSize);
-            String window = text.substring(pos, end);
-            StringBuilder sb = new StringBuilder(window);
-            updateMatchedFilters(sb, filterList, matched);
-
-            if (!requireAll && anyMatched(matched)) return true;
-            // advance by windowSize - maxPatternLen to keep overlap for matches across boundaries
-            pos += Math.max(1, windowSize - maxPatternLen);
+    private void trimSlidingWindow(final StringBuilder slidingWindow, final int maximumPatternLength) {
+        if (slidingWindow.length() > maximumPatternLength) {
+            slidingWindow.delete(0, slidingWindow.length() - maximumPatternLength);
         }
-
-        return requireAll ? allMatched(matched) : anyMatched(matched);
     }
 
-    private String extractTextWithTika(final Path filePath) throws Exception {
-        org.apache.tika.Tika tika = new org.apache.tika.Tika();
-        return tika.parseToString(filePath.toFile());
-    }
-
-    private boolean matchesTimeFilters(final Path filePath) {
-        if ((timeIncludeRanges == null || timeIncludeRanges.isEmpty()) && (timeExcludeRanges == null || timeExcludeRanges.isEmpty())) {
-            return true;
-        }
-
-        try {
-            final long lastModifiedMillis = Files.getLastModifiedTime(filePath).toMillis();
-            Long creationMillis;
-            try {
-                creationMillis = Files.readAttributes(filePath, BasicFileAttributes.class).creationTime().toMillis();
-            } catch (Exception ex) {
-                creationMillis = null;
-            }
-
-            final java.time.ZoneId zone = java.time.ZoneId.systemDefault();
-
-            final java.util.function.BiPredicate<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry, Long> entryMatchesTimestamp = (r, ts) -> {
-                if (r == null || r.start == null || r.end == null || ts == null) return false;
-                switch (r.mode == null ? com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.DATETIME : r.mode) {
-                    case DATE: {
-                        java.time.LocalDate fileDate = java.time.Instant.ofEpochMilli(ts).atZone(zone).toLocalDate();
-                        java.time.LocalDate startDate = r.start.toInstant().atZone(zone).toLocalDate();
-                        java.time.LocalDate endDate = r.end.toInstant().atZone(zone).toLocalDate();
-                        return !(fileDate.isBefore(startDate) || fileDate.isAfter(endDate));
-                    }
-                    case TIME: {
-                        java.time.LocalTime fileTime = java.time.Instant.ofEpochMilli(ts).atZone(zone).toLocalTime();
-                        java.time.LocalTime startTime = r.start.toInstant().atZone(zone).toLocalTime();
-                        java.time.LocalTime endTime = r.end.toInstant().atZone(zone).toLocalTime();
-                        if (!startTime.isAfter(endTime)) {
-                            return !fileTime.isBefore(startTime) && !fileTime.isAfter(endTime);
-                        } else {
-                            return !fileTime.isBefore(startTime) || !fileTime.isAfter(endTime);
-                        }
-                    }
-                    case DATETIME:
-                    default: {
-                        long s = r.start.getTime();
-                        long e = r.end.getTime();
-                        return ts >= s && ts <= e;
-                    }
-                }
-            };
-
-            // Excludes: if any exclude entry matches any relevant timestamp -> exclude
-            if (timeExcludeRanges != null && !timeExcludeRanges.isEmpty()) {
-                if (log.isDebugEnabled()) {
-                    log.debug("matchesTimeFilters - file={}, lastModified={}, creation={} , excludeEntries={}", filePath, lastModifiedMillis, creationMillis, timeExcludeRanges.size());
-                }
-                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeExcludeRanges) {
-                    if (r == null || !r.enabled) continue;
-                    boolean lmMatch = entryMatchesTimestamp.test(r, lastModifiedMillis);
-                    boolean crMatch = creationMillis != null && entryMatchesTimestamp.test(r, creationMillis);
-                    if (log.isDebugEnabled()) {
-                        log.debug("matchesTimeFilters - exclude entry mode={} start={} end={} -> lmMatch={} crMatch={}", r.mode, r.start, r.end, lmMatch, crMatch);
-                    }
-                    if (lmMatch || crMatch) return false;
-                }
-            }
-
-            // If no includes configured, accept the file
-            if (timeIncludeRanges == null || timeIncludeRanges.isEmpty()) {
+    private boolean anyFilterMatched(final boolean[] matchedFilters) {
+        for (final boolean matched : matchedFilters) {
+            if (matched) {
                 return true;
             }
-
-            if (timeIncludeAllMode) {
-                if (log.isDebugEnabled()) {
-                    log.debug("matchesTimeFilters - ANY/ALL mode=ALL, file={}, lastModified={}, creation={}, includeEntries={}", filePath, lastModifiedMillis, creationMillis, timeIncludeRanges.size());
-                }
-                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
-                    if (r == null || !r.enabled) continue;
-                    boolean lmMatch = entryMatchesTimestamp.test(r, lastModifiedMillis);
-                    boolean crMatch = creationMillis != null && entryMatchesTimestamp.test(r, creationMillis);
-                    if (log.isDebugEnabled()) {
-                        log.debug("matchesTimeFilters - include entry mode={} start={} end={} -> lmMatch={} crMatch={}", r.mode, r.start, r.end, lmMatch, crMatch);
-                    }
-                    boolean matched = lmMatch || crMatch;
-                    if (!matched) return false;
-                }
-                return true;
-            } else {
-                if (log.isDebugEnabled()) {
-                    log.debug("matchesTimeFilters - ANY/ALL mode=ANY, file={}, lastModified={}, creation={}, includeEntries={}", filePath, lastModifiedMillis, creationMillis, timeIncludeRanges.size());
-                }
-                for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry r : timeIncludeRanges) {
-                    if (r == null || !r.enabled) continue;
-                    boolean lmMatch = entryMatchesTimestamp.test(r, lastModifiedMillis);
-                    boolean crMatch = creationMillis != null && entryMatchesTimestamp.test(r, creationMillis);
-                    if (log.isDebugEnabled()) {
-                        log.debug("matchesTimeFilters - include entry mode={} start={} end={} -> lmMatch={} crMatch={}", r.mode, r.start, r.end, lmMatch, crMatch);
-                    }
-                    if (lmMatch || crMatch) return true;
-                }
-                return false;
-            }
-        } catch (Exception e) {
-            if (log.isDebugEnabled())
-                log.debug("matchesTimeFilters - filesystem error for {}: {}", filePath, e.getMessage());
-            return true; // don't block search on filesystem errors
         }
-    }
-
-    // Konsolidierte Hilfsmethoden (einmalig vorhanden):
-    private List<FilterEntity> buildFilterEntities(final List<String> filters, final Map<String, Boolean> caseMap) {
-        List<FilterEntity> filterList = new ArrayList<>();
-        if (filters == null || filters.isEmpty()) return filterList;
-        for (String filter : filters) {
-            if (filter == null) continue;
-            String trimmedFilter = filter.trim();
-            if (trimmedFilter.isEmpty()) continue;
-            final FilterEntity filterEntity = new FilterEntity();
-            filterEntity.pattern = trimmedFilter;
-            filterEntity.caseSensitive = caseMap != null && Boolean.TRUE.equals(caseMap.get(trimmedFilter));
-            filterEntity.patternKey = filterEntity.caseSensitive ? trimmedFilter : trimmedFilter.toLowerCase(Locale.ROOT);
-            filterList.add(filterEntity);
-        }
-        return filterList;
-    }
-
-    private void updateMatchedFilters(final StringBuilder window, final List<FilterEntity> filterList, final boolean[] matched) {
-        String lowerWindow = null;
-        String windowStr = null;
-        for (int i = 0; i < filterList.size(); i++) {
-            if (matched[i]) continue;
-            final FilterEntity fe = filterList.get(i);
-            if (fe.caseSensitive) {
-                if (windowStr == null) windowStr = window.toString();
-                if (windowStr.contains(fe.patternKey)) matched[i] = true;
-            } else {
-                if (lowerWindow == null) lowerWindow = window.toString().toLowerCase(Locale.ROOT);
-                if (lowerWindow.contains(fe.patternKey)) matched[i] = true;
-            }
-        }
-    }
-
-    private void trimWindow(final StringBuilder window, final int maxLength) {
-        if (window.length() > maxLength) {
-            window.delete(0, window.length() - maxLength);
-        }
-    }
-
-    private boolean anyMatched(final boolean[] matched) {
-        for (boolean m : matched) if (m) return true;
         return false;
     }
 
-    private boolean allMatched(final boolean[] matched) {
-        for (boolean m : matched) if (!m) return false;
+    private boolean allFiltersMatched(final boolean[] matchedFilters) {
+        for (final boolean matched : matchedFilters) {
+            if (!matched) {
+                return false;
+            }
+        }
         return true;
     }
 
