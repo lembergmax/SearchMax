@@ -1,798 +1,726 @@
 package com.mlprograms.searchmax.view;
 
-import com.mlprograms.searchmax.model.AllowExtensionsTableModel;
-import com.mlprograms.searchmax.model.DenyExtensionsTableModel;
-import com.mlprograms.searchmax.model.ExtensionsTableModelBase;
-import com.mlprograms.searchmax.model.TextFiltersTableModel;
-import com.mlprograms.searchmax.model.TimeRangeTableModel;
-
-import com.github.lgooddatepicker.components.DatePicker;
-import com.github.lgooddatepicker.components.TimePicker;
+import com.mlprograms.searchmax.model.*;
+import com.mlprograms.searchmax.view.timerange.TimeRangeInputDialog;
+import com.mlprograms.searchmax.view.timerange.TimeRangeInputResult;
+import lombok.Getter;
 
 import javax.swing.*;
 import java.awt.*;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Date;
+import java.util.*;
+import java.util.List;
+import java.util.function.Supplier;
 
-public class FiltersDialog extends JDialog {
+public final class FiltersDialog extends JDialog {
 
-    // --- Anpassbare UI-Größen (zentral hier ändern) -----------------
-    private static final int DATE_PICKER_WIDTH = 220; // Breite des DatePickers (inkl. '...'-Button)
-    private static final int TIME_PICKER_WIDTH = 110; // Breite des TimePickers
-    private static final int PICKER_HEIGHT = 28;
-    private static final int DIALOG_EXTRA_WIDTH = 250; // zusätzlicher Raum für Ränder
-    private static final int DIALOG_EXTRA_HEIGHT = 75; // zusätzlicher Raum für Titel/Buttons
-    // ----------------------------------------------------------------
+    private static final int BUTTON_WIDTH = 120;
+    private static final int BUTTON_HEIGHT = 24;
+    private static final int TABLE_ROW_HEIGHT = 24;
+    private static final int LAYOUT_GAP = 8;
+    private static final int BUTTON_GAP = 6;
 
-    private final TextFiltersTableModel includesTextModel = new TextFiltersTableModel();
-    private final TextFiltersTableModel excludesTextModel = new TextFiltersTableModel();
-    // Neue Modelle für Datei-Inhalt
-    private final TextFiltersTableModel includesContentModel = new TextFiltersTableModel();
-    private final TextFiltersTableModel excludesContentModel = new TextFiltersTableModel();
-    // Zeitspannen-Modelle
-    private final TimeRangeTableModel includesTimeModel = new TimeRangeTableModel();
-    private final TimeRangeTableModel excludesTimeModel = new TimeRangeTableModel();
+    // Filter Models
+    private final TextFiltersTableModel filenameIncludesModel = new TextFiltersTableModel();
+    private final TextFiltersTableModel filenameExcludesModel = new TextFiltersTableModel();
+    private final TextFiltersTableModel contentIncludesModel = new TextFiltersTableModel();
+    private final TextFiltersTableModel contentExcludesModel = new TextFiltersTableModel();
+    private final TimeRangeTableModel timeIncludesModel = new TimeRangeTableModel();
+    private final TimeRangeTableModel timeExcludesModel = new TimeRangeTableModel();
 
+    // Initial State
     private final Map<String, Boolean> initialExtensionsAllow;
     private final Map<String, Boolean> initialExtensionsDeny;
-    private final Map<String, Boolean> initialIncludesCase;
-    private final Map<String, Boolean> initialExcludesCase;
+    private final Map<String, Boolean> initialFilenameIncludesCase;
+    private final Map<String, Boolean> initialFilenameExcludesCase;
     private final Map<String, Boolean> initialContentIncludes;
     private final Map<String, Boolean> initialContentExcludes;
     private final Map<String, Boolean> initialContentIncludesCase;
     private final Map<String, Boolean> initialContentExcludesCase;
-    private final java.util.List<TimeRangeTableModel.Entry> initialTimeIncludes;
-    private final java.util.List<TimeRangeTableModel.Entry> initialTimeExcludes;
-    private boolean confirmed = false;
-    private boolean includeAllMode; // Standard ist false, explizite Initialisierung entfernt
-    // Modus für Inhalts-Filter: ob alle Filter passen müssen
-    private boolean contentIncludeAllMode; // Standard ist false
-    private boolean timeIncludeAllMode; // eigener Modus für Zeitfilter
+    private final List<TimeRangeTableModel.Entry> initialTimeIncludes;
+    private final List<TimeRangeTableModel.Entry> initialTimeExcludes;
 
-    public FiltersDialog(Frame owner, Map<String, Boolean> initialIncludes, Map<String, Boolean> initialExcludes, Map<String, Boolean> initialExtensionsAllow, Map<String, Boolean> initialExtensionsDeny, Map<String, Boolean> initialIncludesCase, Map<String, Boolean> initialExcludesCase, boolean initialIncludeAllMode, Map<String, Boolean> initialContentIncludes, Map<String, Boolean> initialContentExcludes, Map<String, Boolean> initialContentIncludesCase, Map<String, Boolean> initialContentExcludesCase, boolean initialContentIncludeAllMode, java.util.List<TimeRangeTableModel.Entry> initialTimeIncludes, java.util.List<TimeRangeTableModel.Entry> initialTimeExcludes, boolean initialTimeIncludeAllMode) {
+    // Mode Flags
+    private boolean filenameIncludeAllMode;
+    @Getter
+    private boolean contentIncludeAllMode;
+    @Getter
+    private boolean timeIncludeAllMode;
+    // Getters for filter data
+    @Getter
+    private boolean isConfirmed = false;
+
+    // Extension Getters
+    private Supplier<Map<String, Boolean>> extensionsAllowSupplier = LinkedHashMap::new;
+    private Supplier<Map<String, Boolean>> extensionsDenySupplier = LinkedHashMap::new;
+
+    public FiltersDialog(final Frame owner,
+                         final Map<String, Boolean> initialFilenameIncludes,
+                         final Map<String, Boolean> initialFilenameExcludes,
+                         final Map<String, Boolean> initialExtensionsAllow,
+                         final Map<String, Boolean> initialExtensionsDeny,
+                         final Map<String, Boolean> initialFilenameIncludesCase,
+                         final Map<String, Boolean> initialFilenameExcludesCase,
+                         final boolean initialFilenameIncludeAllMode,
+                         final Map<String, Boolean> initialContentIncludes,
+                         final Map<String, Boolean> initialContentExcludes,
+                         final Map<String, Boolean> initialContentIncludesCase,
+                         final Map<String, Boolean> initialContentExcludesCase,
+                         final boolean initialContentIncludeAllMode,
+                         final List<TimeRangeTableModel.Entry> initialTimeIncludes,
+                         final List<TimeRangeTableModel.Entry> initialTimeExcludes,
+                         final boolean initialTimeIncludeAllMode) {
+
         super(owner, GuiConstants.FILTERS_DIALOG_TITLE, true);
-        this.initialExtensionsAllow = initialExtensionsAllow == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsAllow);
-        this.initialExtensionsDeny = initialExtensionsDeny == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExtensionsDeny);
-        this.initialIncludesCase = initialIncludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialIncludesCase);
-        this.initialExcludesCase = initialExcludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialExcludesCase);
-        this.initialContentIncludes = initialContentIncludes == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentIncludes);
-        this.initialContentExcludes = initialContentExcludes == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentExcludes);
-        this.initialContentIncludesCase = initialContentIncludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentIncludesCase);
-        this.initialContentExcludesCase = initialContentExcludesCase == null ? new LinkedHashMap<>() : new LinkedHashMap<>(initialContentExcludesCase);
-        this.initialTimeIncludes = initialTimeIncludes == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(initialTimeIncludes);
-        this.initialTimeExcludes = initialTimeExcludes == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(initialTimeExcludes);
-        this.includeAllMode = initialIncludeAllMode;
+
+        // Initialize state with safe copies
+        this.initialExtensionsAllow = createSafeCopy(initialExtensionsAllow);
+        this.initialExtensionsDeny = createSafeCopy(initialExtensionsDeny);
+        this.initialFilenameIncludesCase = createSafeCopy(initialFilenameIncludesCase);
+        this.initialFilenameExcludesCase = createSafeCopy(initialFilenameExcludesCase);
+        this.initialContentIncludes = createSafeCopy(initialContentIncludes);
+        this.initialContentExcludes = createSafeCopy(initialContentExcludes);
+        this.initialContentIncludesCase = createSafeCopy(initialContentIncludesCase);
+        this.initialContentExcludesCase = createSafeCopy(initialContentExcludesCase);
+        this.initialTimeIncludes = createSafeCopy(initialTimeIncludes);
+        this.initialTimeExcludes = createSafeCopy(initialTimeExcludes);
+
+        this.filenameIncludeAllMode = initialFilenameIncludeAllMode;
         this.contentIncludeAllMode = initialContentIncludeAllMode;
         this.timeIncludeAllMode = initialTimeIncludeAllMode;
 
-        populateFilters(initialIncludes, initialExcludes);
-        populateContentFilters(this.initialContentIncludes, this.initialContentExcludes);
-        populateTimeFilters(this.initialTimeIncludes, this.initialTimeExcludes);
-        // Zeitwerte können später hinzugefügt werden - aktuell keine initialen TimeRanges geladen
-        applyCaseFlags();
-        applyContentCaseFlags();
-        initUI();
+        initializeFilterData();
+        initializeUserInterface();
+    }
+
+    private <T> Map<String, T> createSafeCopy(final Map<String, T> original) {
+        return original == null ? new LinkedHashMap<>() : new LinkedHashMap<>(original);
+    }
+
+    private <T> List<T> createSafeCopy(final List<T> original) {
+        return original == null ? new ArrayList<>() : new ArrayList<>(original);
+    }
+
+    private void initializeFilterData() {
+        populateTextFilters(initialContentIncludes, initialContentExcludes, filenameIncludesModel, filenameExcludesModel);
+        populateTextFilters(initialContentIncludes, initialContentExcludes, contentIncludesModel, contentExcludesModel);
+        populateTimeFilters(initialTimeIncludes, initialTimeExcludes);
+        applyCaseSensitivityFlags();
+    }
+
+    private void populateTextFilters(final Map<String, Boolean> includesMap,
+                                     final Map<String, Boolean> excludesMap,
+                                     final TextFiltersTableModel includesModel,
+                                     final TextFiltersTableModel excludesModel) {
+        populateTextFilterModel(includesMap, includesModel);
+        populateTextFilterModel(excludesMap, excludesModel);
+    }
+
+    private void populateTextFilterModel(final Map<String, Boolean> sourceMap, final TextFiltersTableModel targetModel) {
+        if (sourceMap != null) {
+            for (final Map.Entry<String, Boolean> entry : sourceMap.entrySet()) {
+                final String key = entry.getKey();
+                final boolean enabled = Boolean.TRUE.equals(entry.getValue());
+
+                if (key != null) {
+                    final String trimmedKey = key.trim();
+                    if (!trimmedKey.isEmpty()) {
+                        targetModel.addEntry(trimmedKey, enabled);
+                    }
+                }
+            }
+        }
+    }
+
+    private void populateTimeFilters(final List<TimeRangeTableModel.Entry> includesList,
+                                     final List<TimeRangeTableModel.Entry> excludesList) {
+        populateTimeFilterModel(includesList, timeIncludesModel);
+        populateTimeFilterModel(excludesList, timeExcludesModel);
+    }
+
+    private void populateTimeFilterModel(final List<TimeRangeTableModel.Entry> sourceList,
+                                         final TimeRangeTableModel targetModel) {
+        if (sourceList != null) {
+            for (final TimeRangeTableModel.Entry entry : sourceList) {
+                if (entry != null) {
+                    targetModel.addEntry(entry.start, entry.end, entry.mode, entry.enabled);
+                }
+            }
+        }
+    }
+
+    private void applyCaseSensitivityFlags() {
+        applyCaseSensitivityToModel(initialFilenameIncludesCase, filenameIncludesModel);
+        applyCaseSensitivityToModel(initialFilenameExcludesCase, filenameExcludesModel);
+        applyCaseSensitivityToModel(initialContentIncludesCase, contentIncludesModel);
+        applyCaseSensitivityToModel(initialContentExcludesCase, contentExcludesModel);
+    }
+
+    private void applyCaseSensitivityToModel(final Map<String, Boolean> caseMap,
+                                             final TextFiltersTableModel model) {
+        for (final TextFiltersTableModel.Entry entry : model.getEntries()) {
+            final Boolean isCaseSensitive = caseMap.get(entry.pattern);
+            entry.caseSensitive = Boolean.TRUE.equals(isCaseSensitive);
+        }
+    }
+
+    private void initializeUserInterface() {
+        setLayout(new BorderLayout(LAYOUT_GAP, LAYOUT_GAP));
+
+        final JPanel centerPanel = createCenterPanel();
+        final JPanel bottomPanel = createBottomPanel();
+
+        add(centerPanel, BorderLayout.CENTER);
+        add(bottomPanel, BorderLayout.SOUTH);
+
+        registerEscapeKeyHandler();
         pack();
-        setLocationRelativeTo(owner);
+        setLocationRelativeTo(getOwner());
     }
 
-    private void populateFilters(Map<String, Boolean> inc, Map<String, Boolean> exc) {
-        if (inc != null) {
-            for (Map.Entry<String, Boolean> e : inc.entrySet()) {
-                String k = e.getKey();
-                boolean enabled = Boolean.TRUE.equals(e.getValue());
-                if (k == null) continue;
-                String t = k.trim();
-                if (t.isEmpty()) continue;
-                includesTextModel.addEntry(t, enabled);
-            }
-        }
-
-        if (exc != null) {
-            for (Map.Entry<String, Boolean> e : exc.entrySet()) {
-                String k = e.getKey();
-                boolean enabled = Boolean.TRUE.equals(e.getValue());
-                if (k == null) continue;
-                String t = k.trim();
-                if (t.isEmpty()) continue;
-                excludesTextModel.addEntry(t, enabled);
-            }
-        }
+    private JPanel createCenterPanel() {
+        final JPanel panel = new JPanel(new GridLayout(1, 4, LAYOUT_GAP, LAYOUT_GAP));
+        panel.add(createFilenameFiltersPanel());
+        panel.add(createContentFiltersPanel());
+        panel.add(createExtensionsPanel());
+        panel.add(createTimeFiltersPanel());
+        return panel;
     }
 
-    // Populate content (file-content) filters into the content table models
-    private void populateContentFilters(Map<String, Boolean> inc, Map<String, Boolean> exc) {
-        if (inc != null) {
-            for (Map.Entry<String, Boolean> e : inc.entrySet()) {
-                String k = e.getKey();
-                boolean enabled = Boolean.TRUE.equals(e.getValue());
-                if (k == null) continue;
-                String t = k.trim();
-                if (t.isEmpty()) continue;
-                includesContentModel.addEntry(t, enabled);
-            }
-        }
-
-        if (exc != null) {
-            for (Map.Entry<String, Boolean> e : exc.entrySet()) {
-                String k = e.getKey();
-                boolean enabled = Boolean.TRUE.equals(e.getValue());
-                if (k == null) continue;
-                String t = k.trim();
-                if (t.isEmpty()) continue;
-                excludesContentModel.addEntry(t, enabled);
-            }
-        }
+    private JPanel createFilenameFiltersPanel() {
+        return createTextFiltersPanel(
+                filenameIncludesModel,
+                filenameExcludesModel,
+                GuiConstants.FILTERS_PANEL_TITLE,
+                filenameIncludeAllMode,
+                this::setFilenameIncludeAllMode,
+                GuiConstants.INPUT_ADD_PATTERN
+        );
     }
 
-    // Populate initial time filter entries into the TimeRangeTableModel instances
-    private void populateTimeFilters(java.util.List<TimeRangeTableModel.Entry> inc, java.util.List<TimeRangeTableModel.Entry> exc) {
-        if (inc != null) {
-            for (TimeRangeTableModel.Entry e : inc) {
-                if (e == null) continue;
-                // TimeRangeTableModel.addEntry expects (Date start, Date end, Mode mode, boolean enabled)
-                includesTimeModel.addEntry(e.start, e.end, e.mode, e.enabled);
-            }
-        }
-        if (exc != null) {
-            for (TimeRangeTableModel.Entry e : exc) {
-                if (e == null) continue;
-                excludesTimeModel.addEntry(e.start, e.end, e.mode, e.enabled);
-            }
-        }
+    private JPanel createContentFiltersPanel() {
+        return createTextFiltersPanel(
+                contentIncludesModel,
+                contentExcludesModel,
+                GuiConstants.CONTENT_PANEL_TITLE,
+                contentIncludeAllMode,
+                this::setContentIncludeAllMode,
+                GuiConstants.INPUT_ADD_CONTENT_PATTERN
+        );
     }
 
-    // Apply initial case-sensitivity flags to content filter entries
-    private void applyContentCaseFlags() {
-        for (TextFiltersTableModel.Entry en : includesContentModel.getEntries()) {
-            Boolean v = this.initialContentIncludesCase.get(en.pattern);
-            en.caseSensitive = Boolean.TRUE.equals(v);
-        }
-        for (TextFiltersTableModel.Entry en : excludesContentModel.getEntries()) {
-            Boolean v = this.initialContentExcludesCase.get(en.pattern);
-            en.caseSensitive = Boolean.TRUE.equals(v);
-        }
-    }
+    private JPanel createTextFiltersPanel(final TextFiltersTableModel includesModel,
+                                          final TextFiltersTableModel excludesModel,
+                                          final String panelTitle,
+                                          final boolean currentIncludeAllMode,
+                                          final java.util.function.Consumer<Boolean> includeAllModeSetter,
+                                          final String addDialogMessage) {
 
-    private void applyCaseFlags() {
-        for (TextFiltersTableModel.Entry en : includesTextModel.getEntries()) {
-            Boolean v = this.initialIncludesCase.get(en.pattern);
-            en.caseSensitive = Boolean.TRUE.equals(v);
-        }
-        for (TextFiltersTableModel.Entry en : excludesTextModel.getEntries()) {
-            Boolean v = this.initialExcludesCase.get(en.pattern);
-            en.caseSensitive = Boolean.TRUE.equals(v);
-        }
-        // Content models haben derzeit keine initialen Case-Flags (können später ergänzt werden)
-    }
+        final JPanel panel = new JPanel(new BorderLayout(4, 4));
+        panel.setBorder(BorderFactory.createTitledBorder(panelTitle));
 
-    private void initUI() {
-        setLayout(new BorderLayout(8, 8));
-        // GridLayout auf 1x4 erweitert: Text | Content | Extensions | TimeRanges
-        JPanel center = new JPanel(new GridLayout(1, 4, 8, 8));
-        center.add(createTextFiltersPanel());
-        center.add(createContentFiltersPanel());
-        center.add(createExtensionsPanel());
-        center.add(createTimeFiltersPanel());
-        add(center, BorderLayout.CENTER);
-        add(createBottomPanel(), BorderLayout.SOUTH);
-        registerEscKey();
-    }
+        final JTable includeTable = createTextTable(includesModel);
+        final JTable excludeTable = createTextTable(excludesModel);
 
-    private Component createTextFiltersPanel() {
-        JPanel panel = new JPanel(new BorderLayout(4, 4));
-        panel.setBorder(BorderFactory.createTitledBorder(GuiConstants.FILTERS_PANEL_TITLE));
+        final JTabbedPane tabbedPane = createFilterTabbedPane(includeTable, excludeTable);
+        panel.add(tabbedPane, BorderLayout.CENTER);
 
-        JTable includeTable = new JTable(includesTextModel);
-        configureTextTable(includeTable, includesTextModel);
-        JTable excludeTable = new JTable(excludesTextModel);
-        configureTextTable(excludeTable, excludesTextModel);
+        final JPanel modeSelectionPanel = createModeSelectionPanel(currentIncludeAllMode, includeAllModeSetter);
+        panel.add(modeSelectionPanel, BorderLayout.NORTH);
 
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.add(GuiConstants.TAB_ALLOW, new JScrollPane(includeTable));
-        tabs.add(GuiConstants.TAB_DENY, new JScrollPane(excludeTable));
-
-        panel.add(tabs, BorderLayout.CENTER);
-
-        JPanel topOptions = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JRadioButton anyBtn = new JRadioButton(GuiConstants.RADIO_ANY);
-        JRadioButton allBtn = new JRadioButton(GuiConstants.RADIO_ALL);
-        ButtonGroup group = new ButtonGroup();
-        group.add(anyBtn);
-        group.add(allBtn);
-        anyBtn.setSelected(!includeAllMode);
-        allBtn.setSelected(includeAllMode);
-        anyBtn.addActionListener(e -> includeAllMode = false);
-        allBtn.addActionListener(e -> includeAllMode = true);
-        topOptions.add(anyBtn);
-        topOptions.add(allBtn);
-        panel.add(topOptions, BorderLayout.NORTH);
-
-        JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
-        Dimension small = new Dimension(120, 24);
-        JButton add = new JButton(GuiConstants.BUTTON_ADD);
-        add.setPreferredSize(small);
-        JButton enableAll = new JButton(GuiConstants.BUTTON_ENABLE_ALL);
-        enableAll.setPreferredSize(small);
-        JButton disableAll = new JButton(GuiConstants.BUTTON_DISABLE_ALL);
-        disableAll.setPreferredSize(small);
-        btnBar.add(add);
-        btnBar.add(enableAll);
-        btnBar.add(disableAll);
-        panel.add(btnBar, BorderLayout.SOUTH);
-
-        add.addActionListener(e -> {
-            String raw = JOptionPane.showInputDialog(this, GuiConstants.INPUT_ADD_PATTERN, GuiConstants.INPUT_ADD_TITLE, JOptionPane.PLAIN_MESSAGE);
-            if (raw != null) {
-                String t = raw.trim();
-                if (t.isEmpty()) return;
-                int idx = tabs.getSelectedIndex();
-                if (idx == 0) includesTextModel.addEntry(t, true);
-                else excludesTextModel.addEntry(t, true);
-            }
-        });
-
-        enableAll.addActionListener(e -> {
-            int idx = tabs.getSelectedIndex();
-            if (idx == 0) includesTextModel.setAllEnabled(true);
-            else excludesTextModel.setAllEnabled(true);
-        });
-        disableAll.addActionListener(e -> {
-            int idx = tabs.getSelectedIndex();
-            if (idx == 0) includesTextModel.setAllEnabled(false);
-            else excludesTextModel.setAllEnabled(false);
-        });
+        final JPanel buttonPanel = createTextFilterButtonPanel(tabbedPane, includesModel, excludesModel, addDialogMessage);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
 
         return panel;
     }
 
-    // Neues Panel für Datei-Inhalt
-    private Component createContentFiltersPanel() {
-        JPanel panel = new JPanel(new BorderLayout(4, 4));
-        panel.setBorder(BorderFactory.createTitledBorder(GuiConstants.CONTENT_PANEL_TITLE));
-
-        JTable includeTable = new JTable(includesContentModel);
-        configureTextTable(includeTable, includesContentModel);
-        JTable excludeTable = new JTable(excludesContentModel);
-        configureTextTable(excludeTable, excludesContentModel);
-
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.add(GuiConstants.TAB_ALLOW, new JScrollPane(includeTable));
-        tabs.add(GuiConstants.TAB_DENY, new JScrollPane(excludeTable));
-
-        panel.add(tabs, BorderLayout.CENTER);
-
-        // Top options: Any / All für Inhalts-Filter
-        JPanel topOptions = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JRadioButton anyBtn = new JRadioButton(GuiConstants.RADIO_ANY);
-        JRadioButton allBtn = new JRadioButton(GuiConstants.RADIO_ALL);
-        ButtonGroup group = new ButtonGroup();
-        group.add(anyBtn);
-        group.add(allBtn);
-        anyBtn.setSelected(!contentIncludeAllMode);
-        allBtn.setSelected(contentIncludeAllMode);
-        anyBtn.addActionListener(e -> contentIncludeAllMode = false);
-        allBtn.addActionListener(e -> contentIncludeAllMode = true);
-        topOptions.add(anyBtn);
-        topOptions.add(allBtn);
-        panel.add(topOptions, BorderLayout.NORTH);
-
-        JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
-        Dimension small = new Dimension(120, 24);
-        JButton add = new JButton(GuiConstants.BUTTON_ADD);
-        add.setPreferredSize(small);
-        JButton enableAll = new JButton(GuiConstants.BUTTON_ENABLE_ALL);
-        enableAll.setPreferredSize(small);
-        JButton disableAll = new JButton(GuiConstants.BUTTON_DISABLE_ALL);
-        disableAll.setPreferredSize(small);
-        btnBar.add(add);
-        btnBar.add(enableAll);
-        btnBar.add(disableAll);
-        panel.add(btnBar, BorderLayout.SOUTH);
-
-        add.addActionListener(e -> {
-            String raw = JOptionPane.showInputDialog(this, GuiConstants.INPUT_ADD_CONTENT_PATTERN, GuiConstants.INPUT_ADD_TITLE, JOptionPane.PLAIN_MESSAGE);
-            if (raw != null) {
-                String t = raw.trim();
-                if (t.isEmpty()) return;
-                int idx = tabs.getSelectedIndex();
-                if (idx == 0) includesContentModel.addEntry(t, true);
-                else excludesContentModel.addEntry(t, true);
-            }
-        });
-
-        enableAll.addActionListener(e -> {
-            int idx = tabs.getSelectedIndex();
-            if (idx == 0) includesContentModel.setAllEnabled(true);
-            else excludesContentModel.setAllEnabled(true);
-        });
-        disableAll.addActionListener(e -> {
-            int idx = tabs.getSelectedIndex();
-            if (idx == 0) includesContentModel.setAllEnabled(false);
-            else excludesContentModel.setAllEnabled(false);
-        });
-
-        return panel;
+    private JTable createTextTable(final TextFiltersTableModel model) {
+        final JTable table = new JTable(model);
+        configureTextTable(table, model);
+        return table;
     }
 
-    private void configureTextTable(JTable table, TextFiltersTableModel model) {
+    private void configureTextTable(final JTable table, final TextFiltersTableModel model) {
         table.setFillsViewportHeight(true);
-        table.setRowHeight(24);
-        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellRenderer(new ButtonCellRenderer());
-        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(model::removeAt));
+        table.setRowHeight(TABLE_ROW_HEIGHT);
+
+        final int removeColumnIndex = model.getRemoveColumnIndex();
+        table.getColumnModel().getColumn(removeColumnIndex).setCellRenderer(new ButtonCellRenderer());
+        table.getColumnModel().getColumn(removeColumnIndex).setCellEditor(new ButtonCellEditor(model::removeAt));
     }
 
-    private Component createExtensionsPanel() {
-        JPanel extPanel = new JPanel(new BorderLayout(4, 4));
-        extPanel.setBorder(BorderFactory.createTitledBorder(GuiConstants.EXT_PANEL_TITLE));
+    private JTabbedPane createFilterTabbedPane(final JTable includeTable, final JTable excludeTable) {
+        final JTabbedPane tabbedPane = new JTabbedPane();
+        tabbedPane.add(GuiConstants.TAB_ALLOW, new JScrollPane(includeTable));
+        tabbedPane.add(GuiConstants.TAB_DENY, new JScrollPane(excludeTable));
+        return tabbedPane;
+    }
 
-        AllowExtensionsTableModel allowModel = new AllowExtensionsTableModel();
-        DenyExtensionsTableModel denyModel = new DenyExtensionsTableModel();
+    private JPanel createModeSelectionPanel(final boolean currentIncludeAllMode,
+                                            final java.util.function.Consumer<Boolean> includeAllModeSetter) {
+
+        final JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+
+        final JRadioButton anyRadioButton = new JRadioButton(GuiConstants.RADIO_ANY);
+        final JRadioButton allRadioButton = new JRadioButton(GuiConstants.RADIO_ALL);
+
+        final ButtonGroup buttonGroup = new ButtonGroup();
+        buttonGroup.add(anyRadioButton);
+        buttonGroup.add(allRadioButton);
+
+        anyRadioButton.setSelected(!currentIncludeAllMode);
+        allRadioButton.setSelected(currentIncludeAllMode);
+
+        anyRadioButton.addActionListener(actionEvent -> includeAllModeSetter.accept(false));
+        allRadioButton.addActionListener(actionEvent -> includeAllModeSetter.accept(true));
+
+        panel.add(anyRadioButton);
+        panel.add(allRadioButton);
+
+        return panel;
+    }
+
+    private JPanel createTextFilterButtonPanel(final JTabbedPane tabbedPane,
+                                               final TextFiltersTableModel includesModel,
+                                               final TextFiltersTableModel excludesModel,
+                                               final String addDialogMessage) {
+
+        final JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, BUTTON_GAP, BUTTON_GAP));
+
+        final JButton addButton = createButton(GuiConstants.BUTTON_ADD,
+                actionEvent -> handleAddTextFilter(tabbedPane, includesModel, excludesModel, addDialogMessage));
+
+        final JButton enableAllButton = createButton(GuiConstants.BUTTON_ENABLE_ALL,
+                actionEvent -> handleEnableAllTextFilters(tabbedPane, includesModel, excludesModel));
+
+        final JButton disableAllButton = createButton(GuiConstants.BUTTON_DISABLE_ALL,
+                actionEvent -> handleDisableAllTextFilters(tabbedPane, includesModel, excludesModel));
+
+        panel.add(addButton);
+        panel.add(enableAllButton);
+        panel.add(disableAllButton);
+
+        return panel;
+    }
+
+    private JButton createButton(final String text, final java.awt.event.ActionListener actionListener) {
+        final JButton button = new JButton(text);
+        button.setPreferredSize(new Dimension(BUTTON_WIDTH, BUTTON_HEIGHT));
+        button.addActionListener(actionListener);
+        return button;
+    }
+
+    private void handleAddTextFilter(final JTabbedPane tabbedPane,
+                                     final TextFiltersTableModel includesModel,
+                                     final TextFiltersTableModel excludesModel,
+                                     final String dialogMessage) {
+
+        final String input = JOptionPane.showInputDialog(this, dialogMessage,
+                GuiConstants.INPUT_ADD_TITLE, JOptionPane.PLAIN_MESSAGE);
+
+        if (input != null) {
+            final String trimmedInput = input.trim();
+            if (!trimmedInput.isEmpty()) {
+                final int selectedTabIndex = tabbedPane.getSelectedIndex();
+                if (selectedTabIndex == 0) {
+                    includesModel.addEntry(trimmedInput, true);
+                } else {
+                    excludesModel.addEntry(trimmedInput, true);
+                }
+            }
+        }
+    }
+
+    private void handleEnableAllTextFilters(final JTabbedPane tabbedPane,
+                                            final TextFiltersTableModel includesModel,
+                                            final TextFiltersTableModel excludesModel) {
+
+        final int selectedTabIndex = tabbedPane.getSelectedIndex();
+        if (selectedTabIndex == 0) {
+            includesModel.setAllEnabled(true);
+        } else {
+            excludesModel.setAllEnabled(true);
+        }
+    }
+
+    private void handleDisableAllTextFilters(final JTabbedPane tabbedPane,
+                                             final TextFiltersTableModel includesModel,
+                                             final TextFiltersTableModel excludesModel) {
+
+        final int selectedTabIndex = tabbedPane.getSelectedIndex();
+        if (selectedTabIndex == 0) {
+            includesModel.setAllEnabled(false);
+        } else {
+            excludesModel.setAllEnabled(false);
+        }
+    }
+
+    private JPanel createExtensionsPanel() {
+        final JPanel panel = new JPanel(new BorderLayout(4, 4));
+        panel.setBorder(BorderFactory.createTitledBorder(GuiConstants.EXT_PANEL_TITLE));
+
+        final AllowExtensionsTableModel allowModel = new AllowExtensionsTableModel();
+        final DenyExtensionsTableModel denyModel = new DenyExtensionsTableModel();
 
         populateExtensionModels(allowModel, denyModel);
 
-        JTable allowTable = new JTable(allowModel);
-        configureExtensionTable(allowTable, allowModel);
-        JTable denyTable = new JTable(denyModel);
-        configureExtensionTable(denyTable, denyModel);
+        final JTable allowTable = createExtensionTable(allowModel);
+        final JTable denyTable = createExtensionTable(denyModel);
 
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.add(GuiConstants.TAB_ALLOW, new JScrollPane(allowTable));
-        tabs.add(GuiConstants.TAB_DENY, new JScrollPane(denyTable));
+        final JTabbedPane tabbedPane = createFilterTabbedPane(allowTable, denyTable);
+        panel.add(tabbedPane, BorderLayout.CENTER);
 
-        extPanel.add(tabs, BorderLayout.CENTER);
+        final JPanel buttonPanel = createExtensionButtonPanel(tabbedPane, allowModel, denyModel);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
 
-        JPanel extBtnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
-        Dimension small = new Dimension(120, 24);
-        JButton extAdd = new JButton(GuiConstants.BUTTON_ADD);
-        extAdd.setPreferredSize(small);
-        JButton extEnableAll = new JButton(GuiConstants.BUTTON_ENABLE_ALL);
-        extEnableAll.setPreferredSize(small);
-        JButton extDisableAll = new JButton(GuiConstants.BUTTON_DISABLE_ALL);
-        extDisableAll.setPreferredSize(small);
-        extBtnBar.add(extAdd);
-        extBtnBar.add(extEnableAll);
-        extBtnBar.add(extDisableAll);
-        extPanel.add(extBtnBar, BorderLayout.SOUTH);
-
-        extAdd.addActionListener(e -> {
-            String raw = JOptionPane.showInputDialog(this, GuiConstants.INPUT_NEW_EXTENSION, GuiConstants.INPUT_ADD_TITLE, JOptionPane.PLAIN_MESSAGE);
-            if (raw != null) {
-                String t = raw.trim().toLowerCase();
-                if (t.isEmpty()) return;
-                if (!t.startsWith(".")) t = "." + t;
-                int idx = tabs.getSelectedIndex();
-                if (idx == 0) {
-                    // only prevent duplicates within the same table
-                    if (allowModel.contains(t)) {
-                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_EXTENSION_EXISTS, GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
-                    } else {
-                        allowModel.add(t, true);
-                    }
-                } else {
-                    if (denyModel.contains(t)) {
-                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_EXTENSION_EXISTS, GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
-                    } else {
-                        denyModel.add(t, true);
-                    }
-                }
-            }
-        });
-
-        extEnableAll.addActionListener(e -> {
-            int idx = tabs.getSelectedIndex();
-            if (idx == 0) {
-                allowModel.setAllEnabled(true);
-            } else {
-                denyModel.setAllEnabled(true);
-            }
-        });
-        extDisableAll.addActionListener(e -> {
-            int idx = tabs.getSelectedIndex();
-            if (idx == 0) {
-                allowModel.setAllEnabled(false);
-            } else {
-                denyModel.setAllEnabled(false);
-            }
-        });
-
-        // Cross-list duplicate guard removed: allow same extension in both Allow and Deny.
-
-        // Wichtig: Supplier so setzen, dass sie die aktuellen Einträge der Table-Modelle in Map-Form zurückgeben.
-        this.extensionsAllowGetter = () -> {
-            java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-            for (ExtensionsTableModelBase.Entry en : allowModel.getEntries()) {
-                out.put(en.ext, en.enabled);
-            }
-            return out;
-        };
-
-        this.extensionsDenyGetter = () -> {
-            java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-            for (ExtensionsTableModelBase.Entry en : denyModel.getEntries()) {
-                out.put(en.ext, en.enabled);
-            }
-            return out;
-        };
-
-        return extPanel;
-    }
-
-    private void populateExtensionModels(AllowExtensionsTableModel allowModel, DenyExtensionsTableModel denyModel) {
-        if (initialExtensionsAllow != null && !initialExtensionsAllow.isEmpty()) {
-            for (Map.Entry<String, Boolean> en : initialExtensionsAllow.entrySet()) {
-                String ex = en.getKey();
-                boolean enabled = Boolean.TRUE.equals(en.getValue());
-                if (ex == null) continue;
-                String t = ex.trim().toLowerCase();
-                if (t.isEmpty()) continue;
-                if (!t.startsWith(".")) t = "." + t;
-                allowModel.add(t, enabled);
-            }
-        }
-
-        if (initialExtensionsDeny != null && !initialExtensionsDeny.isEmpty()) {
-            for (Map.Entry<String, Boolean> en : initialExtensionsDeny.entrySet()) {
-                String ex = en.getKey();
-                boolean enabled = Boolean.TRUE.equals(en.getValue());
-                if (ex == null) continue;
-                String t = ex.trim().toLowerCase();
-                if (t.isEmpty()) continue;
-                if (!t.startsWith(".")) t = "." + t;
-                // keep both lists independent on initialization (do not remove from allow)
-                denyModel.add(t, enabled);
-            }
-        }
-    }
-
-    private void configureExtensionTable(JTable table, ExtensionsTableModelBase model) {
-        table.setFillsViewportHeight(true);
-        table.setRowHeight(24);
-        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellRenderer(new ButtonCellRenderer());
-        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(model::removeAt));
-    }
-
-    // Neues Panel für Zeitfilter
-    private Component createTimeFiltersPanel() {
-        JPanel panel = new JPanel(new BorderLayout(4, 4));
-        panel.setBorder(BorderFactory.createTitledBorder(GuiConstants.TIME_PANEL_TITLE));
-
-        JTable includeTable = new JTable(includesTimeModel);
-        configureTimeTable(includeTable, includesTimeModel);
-        JTable excludeTable = new JTable(excludesTimeModel);
-        configureTimeTable(excludeTable, excludesTimeModel);
-
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.add(GuiConstants.TAB_ALLOW, new JScrollPane(includeTable));
-        tabs.add(GuiConstants.TAB_DENY, new JScrollPane(excludeTable));
-
-        panel.add(tabs, BorderLayout.CENTER);
-
-        // Top options: Any / All für Zeit-Filter
-        JPanel topOptions = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JRadioButton anyBtn = new JRadioButton(GuiConstants.RADIO_ANY);
-        JRadioButton allBtn = new JRadioButton(GuiConstants.RADIO_ALL);
-        ButtonGroup group = new ButtonGroup();
-        group.add(anyBtn);
-        group.add(allBtn);
-        anyBtn.setSelected(!timeIncludeAllMode);
-        allBtn.setSelected(timeIncludeAllMode);
-        anyBtn.addActionListener(e -> timeIncludeAllMode = false);
-        allBtn.addActionListener(e -> timeIncludeAllMode = true);
-        topOptions.add(anyBtn);
-        topOptions.add(allBtn);
-        panel.add(topOptions, BorderLayout.NORTH);
-
-        JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
-        Dimension small = new Dimension(120, 24);
-        JButton add = new JButton(GuiConstants.BUTTON_ADD);
-        add.setPreferredSize(small);
-        JButton enableAll = new JButton(GuiConstants.BUTTON_ENABLE_ALL);
-        enableAll.setPreferredSize(small);
-        JButton disableAll = new JButton(GuiConstants.BUTTON_DISABLE_ALL);
-        disableAll.setPreferredSize(small);
-        btnBar.add(add);
-        btnBar.add(enableAll);
-        btnBar.add(disableAll);
-        panel.add(btnBar, BorderLayout.SOUTH);
-
-        add.addActionListener(e -> {
-            // Dialog: Modus-Auswahl + klickbare Eingaben (DatePicker + TimePicker)
-            JPanel inputPanel = new JPanel(new GridBagLayout());
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(6, 6, 6, 6);
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-
-            JLabel modeLbl = new JLabel(GuiConstants.LABEL_MODE);
-            String[] modes = {GuiConstants.MODE_TIME, GuiConstants.MODE_DATE, GuiConstants.MODE_DATETIME};
-            JComboBox<String> modeCombo = new JComboBox<>(modes);
-
-            // DatePicker / TimePicker setup (LGoodDatePicker)
-            DatePicker startDatePicker = new DatePicker();
-            DatePicker endDatePicker = new DatePicker();
-            TimePicker startTimePicker = new TimePicker();
-            TimePicker endTimePicker = new TimePicker();
-
-            // Keine erzwungene preferredSize: DatePicker/TimePicker verwenden ihre nativen PreferredSizes
-            // (so werden Panels nur so groß wie nötig)
-            // moderate PreferredSizes so the DatePicker button is visible, but panels stay as small as necessary
-            startDatePicker.setPreferredSize(new Dimension(DATE_PICKER_WIDTH, PICKER_HEIGHT));
-            endDatePicker.setPreferredSize(new Dimension(DATE_PICKER_WIDTH, PICKER_HEIGHT));
-            startTimePicker.setPreferredSize(new Dimension(TIME_PICKER_WIDTH, PICKER_HEIGHT));
-            endTimePicker.setPreferredSize(new Dimension(TIME_PICKER_WIDTH, PICKER_HEIGHT));
-
-            // Panels that combine Date + Time horizontally for a cleaner layout
-            JPanel startPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-            startPanel.add(startDatePicker);
-            startPanel.add(startTimePicker);
-            JPanel endPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-            endPanel.add(endDatePicker);
-            endPanel.add(endTimePicker);
-
-            // sensible defaults
-            startTimePicker.setTime(LocalTime.now().withSecond(0).withNano(0));
-            endTimePicker.setTime(LocalTime.now().plusHours(1).withSecond(0).withNano(0));
-            startDatePicker.setDate(LocalDate.now());
-            endDatePicker.setDate(LocalDate.now());
-
-            // Scroll pane wrapper so the dialog can shrink and still allow access to all controls
-            inputPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-
-            // Editor switching based on mode; will revalidate the scroll's viewport if present
-            final JScrollPane[] scrollRef = new JScrollPane[1];
-            Runnable applyEditor = () -> {
-                String sel = (String) modeCombo.getSelectedItem();
-                boolean showDate = !GuiConstants.MODE_TIME.equals(sel);
-                boolean showTime = !GuiConstants.MODE_DATE.equals(sel);
-                startDatePicker.setVisible(showDate);
-                endDatePicker.setVisible(showDate);
-                startTimePicker.setVisible(showTime);
-                endTimePicker.setVisible(showTime);
-                // ensure defaults when switching to modes
-                if (GuiConstants.MODE_DATETIME.equals(sel)) {
-                    if (startDatePicker.getDate() == null) startDatePicker.setDate(LocalDate.now());
-                    if (endDatePicker.getDate() == null) endDatePicker.setDate(LocalDate.now());
-                    if (startTimePicker.getTime() == null) startTimePicker.setTime(LocalTime.now().withSecond(0).withNano(0));
-                    if (endTimePicker.getTime() == null) endTimePicker.setTime(LocalTime.now().plusHours(1).withSecond(0).withNano(0));
-                }
-                if (scrollRef[0] != null) {
-                    scrollRef[0].getViewport().revalidate();
-                    scrollRef[0].revalidate();
-                    scrollRef[0].repaint();
-                } else {
-                    inputPanel.revalidate();
-                    inputPanel.repaint();
-                }
-            };
-            applyEditor.run();
-            modeCombo.addActionListener(ev -> applyEditor.run());
-
-            // layout: Mode row
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; inputPanel.add(modeLbl, gbc);
-            gbc.gridx = 1; gbc.gridy = 0; gbc.gridwidth = 2; inputPanel.add(modeCombo, gbc);
-            // From row: label + combined panel
-            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; inputPanel.add(new JLabel(GuiConstants.LABEL_FROM), gbc);
-            gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 2; inputPanel.add(startPanel, gbc);
-            // To row
-            gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1; inputPanel.add(new JLabel(GuiConstants.LABEL_TO), gbc);
-            gbc.gridx = 1; gbc.gridy = 2; gbc.gridwidth = 2; inputPanel.add(endPanel, gbc);
-
-            // Let the inputPanel size itself and only use a JScrollPane so the dialog can be smaller on demand
-            JScrollPane scroll = new JScrollPane(inputPanel);
-            scroll.setBorder(BorderFactory.createEmptyBorder());
-            scrollRef[0] = scroll;
-
-            // Build dialog from the scroll pane; pack so it's only as large as needed, but allow resizing
-            JOptionPane pane = new JOptionPane(scroll, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
-            JDialog dialog = pane.createDialog(this, GuiConstants.INPUT_ADD_TIME_TITLE);
-            dialog.pack();
-            dialog.setResizable(true);
-            // Make sure the dialog is at least as large as the inputPanel wants to be
-            Dimension contentPref = inputPanel.getPreferredSize();
-            if (contentPref != null && contentPref.width > 0 && contentPref.height > 0) {
-                // account for dialog chrome (insets) and option button area
-                Insets ins = dialog.getInsets();
-                int extraW = ins.left + ins.right + DIALOG_EXTRA_WIDTH; // safety padding for borders
-                int extraH = ins.top + ins.bottom + DIALOG_EXTRA_HEIGHT; // title + buttons area
-                Dimension packed = dialog.getSize();
-                int w = Math.max(packed.width, contentPref.width + extraW);
-                int h = Math.max(packed.height, contentPref.height + extraH);
-                dialog.setSize(w, h);
-            }
-            dialog.setLocationRelativeTo(this);
-            dialog.setVisible(true);
-             Object selected = pane.getValue();
-             int result = JOptionPane.CLOSED_OPTION;
-             if (selected instanceof Integer) result = (Integer) selected;
-             if (result == JOptionPane.OK_OPTION) {
-                String sel = (String) modeCombo.getSelectedItem();
-                TimeRangeTableModel.Mode mode = TimeRangeTableModel.Mode.TIME;
-                if (GuiConstants.MODE_DATE.equals(sel)) mode = TimeRangeTableModel.Mode.DATE;
-                else if (GuiConstants.MODE_DATETIME.equals(sel)) mode = TimeRangeTableModel.Mode.DATETIME;
-
-                Date start = null;
-                Date end = null;
-
-                // Compose Date from pickers according to mode
-                if (mode == TimeRangeTableModel.Mode.TIME) {
-                    // only times are relevant: use today's date normalized to epoch day for consistency
-                    LocalTime st = startTimePicker.getTime();
-                    LocalTime en = endTimePicker.getTime();
-                    LocalDate base = LocalDate.of(1970, 1, 1);
-                    LocalDateTime sdt = LocalDateTime.of(base, st == null ? LocalTime.MIDNIGHT : st);
-                    LocalDateTime edt = LocalDateTime.of(base, en == null ? LocalTime.MIDNIGHT : en);
-                    start = Date.from(sdt.atZone(ZoneId.systemDefault()).toInstant());
-                    end = Date.from(edt.atZone(ZoneId.systemDefault()).toInstant());
-                } else if (mode == TimeRangeTableModel.Mode.DATE) {
-                    // only dates are relevant: start = start of day, end = end of day (inclusive)
-                    LocalDate sd = startDatePicker.getDate();
-                    LocalDate ed = endDatePicker.getDate();
-                    if (sd != null) start = Date.from(sd.atStartOfDay(ZoneId.systemDefault()).toInstant());
-                    if (ed != null) {
-                        // set end to last millisecond of day
-                        LocalDateTime edtLdt = ed.atTime(23, 59, 59, 999_000_000);
-                        end = Date.from(edtLdt.atZone(ZoneId.systemDefault()).toInstant());
-                    }
-                } else { // DATETIME
-                    LocalDate sd = startDatePicker.getDate();
-                    LocalTime st = startTimePicker.getTime();
-                    LocalDate ed = endDatePicker.getDate();
-                    LocalTime en = endTimePicker.getTime();
-                    if (sd != null && st != null) start = Date.from(LocalDateTime.of(sd, st).atZone(ZoneId.systemDefault()).toInstant());
-                    if (ed != null && en != null) end = Date.from(LocalDateTime.of(ed, en).atZone(ZoneId.systemDefault()).toInstant());
-                }
-
-                // Validierung
-                if (start == null || end == null) {
-                    JOptionPane.showMessageDialog(this, GuiConstants.MSG_INVALID_TIME_RANGE, GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-                if (start.after(end)) {
-                    JOptionPane.showMessageDialog(this, GuiConstants.MSG_INVALID_TIME_RANGE, GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-
-
-                int idx = tabs.getSelectedIndex();
-                if (idx == 0) includesTimeModel.addEntry(start, end, mode, true);
-                else excludesTimeModel.addEntry(start, end, mode, true);
-            }
-        });
-
-        enableAll.addActionListener(e -> {
-            int idx = tabs.getSelectedIndex();
-            if (idx == 0) includesTimeModel.setAllEnabled(true);
-            else excludesTimeModel.setAllEnabled(true);
-        });
-        disableAll.addActionListener(e -> {
-            int idx = tabs.getSelectedIndex();
-            if (idx == 0) includesTimeModel.setAllEnabled(false);
-            else excludesTimeModel.setAllEnabled(false);
-        });
+        initializeExtensionSuppliers(allowModel, denyModel);
 
         return panel;
     }
 
-    private void configureTimeTable(JTable table, TimeRangeTableModel model) {
+    private void populateExtensionModels(final AllowExtensionsTableModel allowModel,
+                                         final DenyExtensionsTableModel denyModel) {
+
+        populateExtensionModel(initialExtensionsAllow, allowModel);
+        populateExtensionModel(initialExtensionsDeny, denyModel);
+    }
+
+    private void populateExtensionModel(final Map<String, Boolean> sourceMap,
+                                        final ExtensionsTableModelBase targetModel) {
+
+        if (sourceMap != null) {
+            for (final Map.Entry<String, Boolean> entry : sourceMap.entrySet()) {
+                final String extension = entry.getKey();
+                final boolean enabled = Boolean.TRUE.equals(entry.getValue());
+
+                if (extension != null) {
+                    final String normalizedExtension = normalizeExtension(extension.trim());
+                    if (!normalizedExtension.isEmpty()) {
+                        targetModel.add(normalizedExtension, enabled);
+                    }
+                }
+            }
+        }
+    }
+
+    private String normalizeExtension(final String extension) {
+        if (extension.isEmpty()) {
+            return extension;
+        }
+        final String lowerCaseExtension = extension.toLowerCase();
+        return lowerCaseExtension.startsWith(".") ? lowerCaseExtension : "." + lowerCaseExtension;
+    }
+
+    private JTable createExtensionTable(final ExtensionsTableModelBase model) {
+        final JTable table = new JTable(model);
+        configureExtensionTable(table, model);
+        return table;
+    }
+
+    private void configureExtensionTable(final JTable table, final ExtensionsTableModelBase model) {
         table.setFillsViewportHeight(true);
-        table.setRowHeight(24);
-        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellRenderer(new ButtonCellRenderer());
-        table.getColumnModel().getColumn(model.getRemoveColumnIndex()).setCellEditor(new ButtonCellEditor(model::removeAt));
+        table.setRowHeight(TABLE_ROW_HEIGHT);
+
+        final int removeColumnIndex = model.getRemoveColumnIndex();
+        table.getColumnModel().getColumn(removeColumnIndex).setCellRenderer(new ButtonCellRenderer());
+        table.getColumnModel().getColumn(removeColumnIndex).setCellEditor(new ButtonCellEditor(model::removeAt));
+    }
+
+    private JPanel createExtensionButtonPanel(final JTabbedPane tabbedPane,
+                                              final AllowExtensionsTableModel allowModel,
+                                              final DenyExtensionsTableModel denyModel) {
+
+        final JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, BUTTON_GAP, BUTTON_GAP));
+
+        final JButton addButton = createButton(GuiConstants.BUTTON_ADD,
+                actionEvent -> handleAddExtension(tabbedPane, allowModel, denyModel));
+
+        final JButton enableAllButton = createButton(GuiConstants.BUTTON_ENABLE_ALL,
+                actionEvent -> handleEnableAllExtensions(tabbedPane, allowModel, denyModel));
+
+        final JButton disableAllButton = createButton(GuiConstants.BUTTON_DISABLE_ALL,
+                actionEvent -> handleDisableAllExtensions(tabbedPane, allowModel, denyModel));
+
+        panel.add(addButton);
+        panel.add(enableAllButton);
+        panel.add(disableAllButton);
+
+        return panel;
+    }
+
+    private void handleAddExtension(final JTabbedPane tabbedPane,
+                                    final AllowExtensionsTableModel allowModel,
+                                    final DenyExtensionsTableModel denyModel) {
+
+        final String input = JOptionPane.showInputDialog(this, GuiConstants.INPUT_NEW_EXTENSION,
+                GuiConstants.INPUT_ADD_TITLE, JOptionPane.PLAIN_MESSAGE);
+
+        if (input != null) {
+            final String normalizedExtension = normalizeExtension(input.trim());
+            if (!normalizedExtension.isEmpty()) {
+                final int selectedTabIndex = tabbedPane.getSelectedIndex();
+
+                if (selectedTabIndex == 0) {
+                    addExtensionToModel(allowModel, normalizedExtension, GuiConstants.MSG_EXTENSION_EXISTS);
+                } else {
+                    addExtensionToModel(denyModel, normalizedExtension, GuiConstants.MSG_EXTENSION_EXISTS);
+                }
+            }
+        }
+    }
+
+    private void addExtensionToModel(final ExtensionsTableModelBase model,
+                                     final String extension,
+                                     final String duplicateMessage) {
+
+        if (model.contains(extension)) {
+            JOptionPane.showMessageDialog(this, duplicateMessage,
+                    GuiConstants.MSG_ERROR_TITLE, JOptionPane.WARNING_MESSAGE);
+        } else {
+            model.add(extension, true);
+        }
+    }
+
+    private void handleEnableAllExtensions(final JTabbedPane tabbedPane,
+                                           final AllowExtensionsTableModel allowModel,
+                                           final DenyExtensionsTableModel denyModel) {
+
+        final int selectedTabIndex = tabbedPane.getSelectedIndex();
+        if (selectedTabIndex == 0) {
+            allowModel.setAllEnabled(true);
+        } else {
+            denyModel.setAllEnabled(true);
+        }
+    }
+
+    private void handleDisableAllExtensions(final JTabbedPane tabbedPane,
+                                            final AllowExtensionsTableModel allowModel,
+                                            final DenyExtensionsTableModel denyModel) {
+
+        final int selectedTabIndex = tabbedPane.getSelectedIndex();
+        if (selectedTabIndex == 0) {
+            allowModel.setAllEnabled(false);
+        } else {
+            denyModel.setAllEnabled(false);
+        }
+    }
+
+    private void initializeExtensionSuppliers(final AllowExtensionsTableModel allowModel,
+                                              final DenyExtensionsTableModel denyModel) {
+
+        this.extensionsAllowSupplier = () -> createExtensionMap(allowModel);
+        this.extensionsDenySupplier = () -> createExtensionMap(denyModel);
+    }
+
+    private Map<String, Boolean> createExtensionMap(final ExtensionsTableModelBase model) {
+        final Map<String, Boolean> map = new LinkedHashMap<>();
+        for (final ExtensionsTableModelBase.Entry entry : model.getEntries()) {
+            map.put(entry.ext, entry.enabled);
+        }
+        return map;
+    }
+
+    private JPanel createTimeFiltersPanel() {
+        final JPanel panel = new JPanel(new BorderLayout(4, 4));
+        panel.setBorder(BorderFactory.createTitledBorder(GuiConstants.TIME_PANEL_TITLE));
+
+        final JTable includeTable = createTimeTable(timeIncludesModel);
+        final JTable excludeTable = createTimeTable(timeExcludesModel);
+
+        final JTabbedPane tabbedPane = createFilterTabbedPane(includeTable, excludeTable);
+        panel.add(tabbedPane, BorderLayout.CENTER);
+
+        final JPanel modeSelectionPanel = createModeSelectionPanel(timeIncludeAllMode, this::setTimeIncludeAllMode);
+        panel.add(modeSelectionPanel, BorderLayout.NORTH);
+
+        final JPanel buttonPanel = createTimeFilterButtonPanel(tabbedPane);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    private JTable createTimeTable(final TimeRangeTableModel model) {
+        final JTable table = new JTable(model);
+        configureTimeTable(table, model);
+        return table;
+    }
+
+    private void configureTimeTable(final JTable table, final TimeRangeTableModel model) {
+        table.setFillsViewportHeight(true);
+        table.setRowHeight(TABLE_ROW_HEIGHT);
+
+        final int removeColumnIndex = model.getRemoveColumnIndex();
+        table.getColumnModel().getColumn(removeColumnIndex).setCellRenderer(new ButtonCellRenderer());
+        table.getColumnModel().getColumn(removeColumnIndex).setCellEditor(new ButtonCellEditor(model::removeAt));
+    }
+
+    private JPanel createTimeFilterButtonPanel(final JTabbedPane tabbedPane) {
+        final JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, BUTTON_GAP, BUTTON_GAP));
+
+        final JButton addButton = createButton(GuiConstants.BUTTON_ADD,
+                actionEvent -> handleAddTimeFilter(tabbedPane));
+
+        final JButton enableAllButton = createButton(GuiConstants.BUTTON_ENABLE_ALL,
+                actionEvent -> handleEnableAllTimeFilters(tabbedPane));
+
+        final JButton disableAllButton = createButton(GuiConstants.BUTTON_DISABLE_ALL,
+                actionEvent -> handleDisableAllTimeFilters(tabbedPane));
+
+        panel.add(addButton);
+        panel.add(enableAllButton);
+        panel.add(disableAllButton);
+
+        return panel;
+    }
+
+    private void handleAddTimeFilter(final JTabbedPane tabbedPane) {
+        final TimeRangeInputResult inputResult = showTimeRangeInputDialog();
+        if (inputResult != null && inputResult.isValid()) {
+            final int selectedTabIndex = tabbedPane.getSelectedIndex();
+            if (selectedTabIndex == 0) {
+                timeIncludesModel.addEntry(inputResult.startDate(), inputResult.endDate(),
+                        inputResult.mode(), true);
+            } else {
+                timeExcludesModel.addEntry(inputResult.startDate(), inputResult.endDate(),
+                        inputResult.mode(), true);
+            }
+        }
+    }
+
+    private TimeRangeInputResult showTimeRangeInputDialog() {
+        final TimeRangeInputDialog dialog = new TimeRangeInputDialog((Frame) getOwner());
+        dialog.setVisible(true);
+        return dialog.getResult();
+    }
+
+    private void handleEnableAllTimeFilters(final JTabbedPane tabbedPane) {
+        final int selectedTabIndex = tabbedPane.getSelectedIndex();
+        if (selectedTabIndex == 0) {
+            timeIncludesModel.setAllEnabled(true);
+        } else {
+            timeExcludesModel.setAllEnabled(true);
+        }
+    }
+
+    private void handleDisableAllTimeFilters(final JTabbedPane tabbedPane) {
+        final int selectedTabIndex = tabbedPane.getSelectedIndex();
+        if (selectedTabIndex == 0) {
+            timeIncludesModel.setAllEnabled(false);
+        } else {
+            timeExcludesModel.setAllEnabled(false);
+        }
     }
 
     private JPanel createBottomPanel() {
-        JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton ok = new JButton(GuiConstants.BUTTON_OK);
-        JButton cancel = new JButton(GuiConstants.CANCEL_BUTTON);
-        bottom.add(ok);
-        bottom.add(cancel);
-        ok.addActionListener(e -> {
-            confirmed = true;
+        final JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
+        final JButton confirmButton = new JButton(GuiConstants.BUTTON_OK);
+        final JButton cancelButton = new JButton(GuiConstants.CANCEL_BUTTON);
+
+        confirmButton.addActionListener(actionEvent -> {
+            isConfirmed = true;
             setVisible(false);
         });
-        cancel.addActionListener(e -> {
-            confirmed = false;
+
+        cancelButton.addActionListener(actionEvent -> {
+            isConfirmed = false;
             setVisible(false);
         });
-        return bottom;
+
+        panel.add(confirmButton);
+        panel.add(cancelButton);
+
+        return panel;
     }
 
-    private void registerEscKey() {
-        getRootPane().registerKeyboardAction(e -> {
-            confirmed = false;
-            setVisible(false);
-        }, KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
+    private void registerEscapeKeyHandler() {
+        getRootPane().registerKeyboardAction(
+                actionEvent -> {
+                    isConfirmed = false;
+                    setVisible(false);
+                },
+                KeyStroke.getKeyStroke("ESCAPE"),
+                JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
     }
 
-    public boolean isConfirmed() {
-        return confirmed;
+    public Map<String, Boolean> getIncludesMap() {
+        return createFilterMap(filenameIncludesModel);
     }
 
-    public java.util.Map<String, Boolean> getIncludesMap() {
-        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-        for (TextFiltersTableModel.Entry en : includesTextModel.getEntries()) out.put(en.pattern, en.enabled);
-        return out;
+    public Map<String, Boolean> getIncludesCaseMap() {
+        return createCaseSensitivityMap(filenameIncludesModel);
     }
 
-    public java.util.Map<String, Boolean> getIncludesCaseMap() {
-        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-        for (TextFiltersTableModel.Entry en : includesTextModel.getEntries()) out.put(en.pattern, en.caseSensitive);
-        return out;
+    public Map<String, Boolean> getExcludesMap() {
+        return createFilterMap(filenameExcludesModel);
     }
 
-    public java.util.Map<String, Boolean> getExcludesMap() {
-        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-        for (TextFiltersTableModel.Entry en : excludesTextModel.getEntries()) out.put(en.pattern, en.enabled);
-        return out;
+    public Map<String, Boolean> getExcludesCaseMap() {
+        return createCaseSensitivityMap(filenameExcludesModel);
     }
 
-    public java.util.Map<String, Boolean> getExcludesCaseMap() {
-        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-        for (TextFiltersTableModel.Entry en : excludesTextModel.getEntries()) out.put(en.pattern, en.caseSensitive);
-        return out;
+    public Map<String, Boolean> getContentIncludesMap() {
+        return createFilterMap(contentIncludesModel);
     }
 
-    // Getter für Inhaltsfilter
-    public java.util.Map<String, Boolean> getContentIncludesMap() {
-        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-        for (TextFiltersTableModel.Entry en : includesContentModel.getEntries()) out.put(en.pattern, en.enabled);
-        return out;
+    public Map<String, Boolean> getContentIncludesCaseMap() {
+        return createCaseSensitivityMap(contentIncludesModel);
     }
 
-    public java.util.Map<String, Boolean> getContentIncludesCaseMap() {
-        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-        for (TextFiltersTableModel.Entry en : includesContentModel.getEntries()) out.put(en.pattern, en.caseSensitive);
-        return out;
+    public Map<String, Boolean> getContentExcludesMap() {
+        return createFilterMap(contentExcludesModel);
     }
 
-    public java.util.Map<String, Boolean> getContentExcludesMap() {
-        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-        for (TextFiltersTableModel.Entry en : excludesContentModel.getEntries()) out.put(en.pattern, en.enabled);
-        return out;
+    public Map<String, Boolean> getContentExcludesCaseMap() {
+        return createCaseSensitivityMap(contentExcludesModel);
     }
 
-    public java.util.Map<String, Boolean> getContentExcludesCaseMap() {
-        java.util.Map<String, Boolean> out = new LinkedHashMap<>();
-        for (TextFiltersTableModel.Entry en : excludesContentModel.getEntries()) out.put(en.pattern, en.caseSensitive);
-        return out;
+    public List<TimeRangeTableModel.Entry> getTimeIncludes() {
+        return new ArrayList<>(timeIncludesModel.getEntries());
     }
 
-    // Getter für Zeitfilter
-    public java.util.List<TimeRangeTableModel.Entry> getTimeIncludes() {
-        return new java.util.ArrayList<>(includesTimeModel.getEntries());
+    public List<TimeRangeTableModel.Entry> getTimeExcludes() {
+        return new ArrayList<>(timeExcludesModel.getEntries());
     }
 
-    public java.util.List<TimeRangeTableModel.Entry> getTimeExcludes() {
-        return new java.util.ArrayList<>(excludesTimeModel.getEntries());
+    public Map<String, Boolean> getExtensionsAllowMap() {
+        return extensionsAllowSupplier.get();
     }
 
-    private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsAllowGetter = LinkedHashMap::new;
-    private java.util.function.Supplier<java.util.Map<String, Boolean>> extensionsDenyGetter = LinkedHashMap::new;
-
-    public java.util.Map<String, Boolean> getExtensionsAllowMap() {
-        return extensionsAllowGetter.get();
-    }
-
-    public java.util.Map<String, Boolean> getExtensionsDenyMap() {
-        return extensionsDenyGetter.get();
+    public Map<String, Boolean> getExtensionsDenyMap() {
+        return extensionsDenySupplier.get();
     }
 
     public boolean isIncludeAllMode() {
-        return includeAllMode;
+        return filenameIncludeAllMode;
     }
 
-    // Getter für Inhaltsmodus
-    public boolean isContentIncludeAllMode() {
-        return contentIncludeAllMode;
+    private Map<String, Boolean> createFilterMap(final TextFiltersTableModel model) {
+        final Map<String, Boolean> map = new LinkedHashMap<>();
+        for (final TextFiltersTableModel.Entry entry : model.getEntries()) {
+            map.put(entry.pattern, entry.enabled);
+        }
+        return map;
     }
 
-    // Getter für den Modus der Zeitfilter (any/all)
-    public boolean isTimeIncludeAllMode() {
-        return timeIncludeAllMode;
+    private Map<String, Boolean> createCaseSensitivityMap(final TextFiltersTableModel model) {
+        final Map<String, Boolean> map = new LinkedHashMap<>();
+        for (final TextFiltersTableModel.Entry entry : model.getEntries()) {
+            map.put(entry.pattern, entry.caseSensitive);
+        }
+        return map;
     }
+
+    private void setFilenameIncludeAllMode(final boolean includeAllMode) {
+        this.filenameIncludeAllMode = includeAllMode;
+    }
+
+    private void setContentIncludeAllMode(final boolean includeAllMode) {
+        this.contentIncludeAllMode = includeAllMode;
+    }
+
+    private void setTimeIncludeAllMode(final boolean includeAllMode) {
+        this.timeIncludeAllMode = includeAllMode;
+    }
+
 }

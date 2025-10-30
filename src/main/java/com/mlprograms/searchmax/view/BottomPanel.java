@@ -8,48 +8,129 @@ import java.awt.*;
 @Getter
 public final class BottomPanel extends JPanel {
 
+    private static final int HORIZONTAL_STRUT_SIZE = 16;
+    private static final int PROGRESS_BAR_WIDTH = 220;
+    private static final int PROGRESS_BAR_HEIGHT = 18;
+    private static final int LAYOUT_GAP = 8;
+
     private final JLabel statusLabel = new JLabel(GuiConstants.STATUS_READY);
     private final JProgressBar progressBar = new JProgressBar();
-    private final JCheckBox performanceModeCheck = new JCheckBox(GuiConstants.PERFORMANCE_MODE);
-    private final JButton logsButton = new JButton(GuiConstants.BUTTON_LOGS);
-    private final JButton settingsButton = new JButton(GuiConstants.BUTTON_SETTINGS);
+    private final JCheckBox performanceModeCheckbox = new JCheckBox(GuiConstants.PERFORMANCE_MODE);
+    private final JButton showLogsButton = new JButton(GuiConstants.BUTTON_LOGS);
+    private final JButton showSettingsButton = new JButton(GuiConstants.BUTTON_SETTINGS);
 
-    public BottomPanel(SearchView parent) {
-        super(new BorderLayout());
-        JPanel info = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        info.add(new JLabel(GuiConstants.STATUS_LABEL_PREFIX));
-        info.add(statusLabel);
-        info.add(Box.createHorizontalStrut(16));
-        add(info, BorderLayout.WEST);
+    public BottomPanel(final SearchView parentView) {
+        super(new BorderLayout(LAYOUT_GAP, LAYOUT_GAP));
+        initializeUserInterface();
+        initializeEventListeners(parentView);
+    }
 
+    private void initializeUserInterface() {
+        addLeftInformationPanel();
+        addRightControlPanel();
+        configureProgressBar();
+    }
+
+    private void addLeftInformationPanel() {
+        final JPanel informationPanel = createInformationPanel();
+        add(informationPanel, BorderLayout.WEST);
+    }
+
+    private JPanel createInformationPanel() {
+        final JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        panel.add(new JLabel(GuiConstants.STATUS_LABEL_PREFIX));
+        panel.add(statusLabel);
+        panel.add(Box.createHorizontalStrut(HORIZONTAL_STRUT_SIZE));
+        return panel;
+    }
+
+    private void addRightControlPanel() {
+        final JPanel controlPanel = createControlPanel();
+        add(controlPanel, BorderLayout.EAST);
+    }
+
+    private JPanel createControlPanel() {
+        final JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        panel.add(performanceModeCheckbox);
+        panel.add(showLogsButton);
+        panel.add(showSettingsButton);
+        panel.add(progressBar);
+        return panel;
+    }
+
+    private void configureProgressBar() {
         progressBar.setVisible(false);
         progressBar.setIndeterminate(false);
-        progressBar.setPreferredSize(new Dimension(220, 18));
+        progressBar.setPreferredSize(new Dimension(PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT));
+    }
 
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        right.add(performanceModeCheck);
-        right.add(logsButton);
-        right.add(settingsButton);
-        right.add(progressBar);
-        add(right, BorderLayout.EAST);
+    private void initializeEventListeners(final SearchView parentView) {
+        initializeShowLogsButtonListener(parentView);
+        initializeShowSettingsButtonListener(parentView);
+    }
 
-        // Log-Button öffnet Log-Viewer über die Parent-View
-        logsButton.addActionListener(e -> {
+    private void initializeShowLogsButtonListener(final SearchView parentView) {
+        showLogsButton.addActionListener(actionEvent -> {
             try {
-                parent.onShowLogs();
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_LOGS_PREFIX + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+                parentView.onShowLogs();
+            } catch (final Exception exception) {
+                showErrorMessage(
+                        GuiConstants.MSG_ERROR_OPEN_LOGS_PREFIX + exception.getMessage(),
+                        GuiConstants.MSG_ERROR_TITLE
+                );
             }
         });
+    }
 
-        // Settings Button öffnet Einstellungen-Dialog
-        settingsButton.addActionListener(e -> {
+    private void initializeShowSettingsButtonListener(final SearchView parentView) {
+        showSettingsButton.addActionListener(actionEvent -> {
             try {
-                parent.onShowSettings();
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_SETTINGS_PREFIX + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+                parentView.onShowSettings();
+            } catch (final Exception exception) {
+                showErrorMessage(
+                        GuiConstants.MSG_ERROR_OPEN_SETTINGS_PREFIX + exception.getMessage(),
+                        GuiConstants.MSG_ERROR_TITLE
+                );
             }
         });
+    }
+
+    private void showErrorMessage(final String message, final String title) {
+        JOptionPane.showMessageDialog(
+                this,
+                message,
+                title,
+                JOptionPane.ERROR_MESSAGE
+        );
+    }
+
+    public void updateStatus(final String statusMessage) {
+        statusLabel.setText(statusMessage);
+    }
+
+    public void showProgressBar(final boolean visible) {
+        progressBar.setVisible(visible);
+    }
+
+    public void setProgressBarIndeterminate(final boolean indeterminate) {
+        progressBar.setIndeterminate(indeterminate);
+    }
+
+    public void setProgressBarValue(final int value) {
+        progressBar.setValue(value);
+    }
+
+    public void setProgressBarRange(final int minimum, final int maximum) {
+        progressBar.setMinimum(minimum);
+        progressBar.setMaximum(maximum);
+    }
+
+    public boolean isPerformanceModeEnabled() {
+        return performanceModeCheckbox.isSelected();
+    }
+
+    public void setPerformanceModeEnabled(final boolean enabled) {
+        performanceModeCheckbox.setSelected(enabled);
     }
 
 }
