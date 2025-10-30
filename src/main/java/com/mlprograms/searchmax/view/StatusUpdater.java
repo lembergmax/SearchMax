@@ -6,131 +6,147 @@ import javax.swing.*;
 import java.beans.PropertyChangeEvent;
 import java.util.List;
 
-/**
- * Aktualisiert den Statusbereich der Benutzeroberfläche basierend auf Änderungen im Modell.
- * Zeigt eine animierte Statusmeldung an, wenn eine Suche läuft.
- */
 @RequiredArgsConstructor
 public final class StatusUpdater {
 
-    /**
-     * Text, der angezeigt wird, wenn die Suche läuft.
-     */
     private static final String SEARCH_RUNNING_TEXT = GuiConstants.SEARCH_RUNNING_TEXT;
-    /**
-     * Referenz auf die zu aktualisierende Suchansicht.
-     */
+    private static final String RESULTS_PROPERTY = "results";
+    private static final String RESULT_ADDED_PROPERTY = "resultAdded";
+    private static final String RESULTS_BATCH_PROPERTY = "resultsBatch";
+    private static final String STATUS_PROPERTY = "status";
+    private static final int DOT_ANIMATION_DELAY_MS = 250;
+    private static final int MAX_DOT_COUNT = 4;
+
     private final SearchView searchView;
-    /**
-     * Timer für die animierten Punkte im Statuslabel.
-     */
-    private Timer dotTimer;
-    /**
-     * Zählt die Anzahl der Punkte für die Animation.
-     */
-    private int dotCount = 0;
+    private Timer dotAnimationTimer;
+    private int dotAnimationCount = 0;
 
-    /**
-     * Wird aufgerufen, wenn sich das Modell ändert.
-     * Aktualisiert die Ergebnisliste oder den Statusbereich je nach Property.
-     *
-     * @param propertyChangeEvent das Ereignis, das die Änderung beschreibt
-     */
     public void onModelChange(final PropertyChangeEvent propertyChangeEvent) {
-        switch (propertyChangeEvent.getPropertyName()) {
-            case "results" -> SwingUtilities.invokeLater(() -> {
-                final Object oldValue = propertyChangeEvent.getOldValue();
-                final Object newValue = propertyChangeEvent.getNewValue();
-                javax.swing.DefaultListModel<String> model = searchView.getCenterPanel().getListModel();
+        final String propertyName = propertyChangeEvent.getPropertyName();
 
-                if (oldValue instanceof java.util.List<?> oldList && newValue instanceof java.util.List<?> newList) {
-                    final int oldSize = oldList.size();
-                    final int newSize = newList.size();
-                    if (newSize < oldSize) {
-                        model.clear();
-                        for (Object object : newList) {
-                            if (object instanceof String string) {
-                                model.addElement(string);
-                            }
-                        }
-                    } else {
-                        for (int i = oldSize; i < newSize; i++) {
-                            Object obj = newList.get(i);
-                            if (obj instanceof String s) {
-                                model.addElement(s);
-                            }
-                        }
-                    }
-                } else if (newValue instanceof List<?> list) {
-                    model.clear();
-                    for (final Object object : list) {
-                        if (object instanceof String string) {
-                            model.addElement(string);
-                        }
-                    }
-                }
-            });
-            case "resultAdded" -> SwingUtilities.invokeLater(() -> {
-                final Object nv = propertyChangeEvent.getNewValue();
-                if (nv instanceof String s) {
-                    searchView.getCenterPanel().getListModel().addElement(s);
-                }
-            });
-            case "resultsBatch" -> SwingUtilities.invokeLater(() -> {
-                final Object nv = propertyChangeEvent.getNewValue();
-                if (nv instanceof java.util.List<?> list) {
-                    final DefaultListModel<String> model = searchView.getCenterPanel().getListModel();
-                    for (Object o : list) {
-                        if (o instanceof String s) model.addElement(s);
-                    }
-                }
-            });
-            case "status" -> SwingUtilities.invokeLater(() -> updateStatus((String) propertyChangeEvent.getNewValue()));
+        SwingUtilities.invokeLater(() -> {
+            switch (propertyName) {
+                case RESULTS_PROPERTY -> handleResultsUpdate(propertyChangeEvent);
+                case RESULT_ADDED_PROPERTY -> handleSingleResultAdded(propertyChangeEvent);
+                case RESULTS_BATCH_PROPERTY -> handleResultsBatchUpdate(propertyChangeEvent);
+                case STATUS_PROPERTY -> handleStatusUpdate(propertyChangeEvent);
+                default -> logUnknownProperty(propertyName);
+            }
+        });
+    }
+
+    private void handleResultsUpdate(final PropertyChangeEvent propertyChangeEvent) {
+        final Object oldValue = propertyChangeEvent.getOldValue();
+        final Object newValue = propertyChangeEvent.getNewValue();
+        final DefaultListModel<String> listModel = searchView.getCenterPanel().getListModel();
+
+        if (oldValue instanceof List<?> oldList && newValue instanceof List<?> newList) {
+            updateListModelIncremental(listModel, oldList, newList);
+        } else if (newValue instanceof List<?> newList) {
+            replaceListModelContents(listModel, newList);
         }
     }
 
-    /**
-     * Aktualisiert den Statusbereich und steuert die Animation.
-     *
-     * @param newStatus der neue Status-Text
-     */
-    private void updateStatus(final String newStatus) {
-        final boolean runningNow = newStatus != null && newStatus.startsWith(SEARCH_RUNNING_TEXT);
-        if (runningNow) {
+    private void updateListModelIncremental(final DefaultListModel<String> listModel,
+                                            final List<?> oldList, final List<?> newList) {
+        final int oldSize = oldList.size();
+        final int newSize = newList.size();
+
+        if (newSize < oldSize) {
+            listModel.clear();
+            addAllStringElementsToListModel(listModel, newList);
+        } else {
+            addNewStringElementsToListModel(listModel, oldSize, newList);
+        }
+    }
+
+    private void replaceListModelContents(final DefaultListModel<String> listModel, final List<?> newList) {
+        listModel.clear();
+        addAllStringElementsToListModel(listModel, newList);
+    }
+
+    private void addAllStringElementsToListModel(final DefaultListModel<String> listModel, final List<?> sourceList) {
+        for (final Object element : sourceList) {
+            if (element instanceof String stringElement) {
+                listModel.addElement(stringElement);
+            }
+        }
+    }
+
+    private void addNewStringElementsToListModel(final DefaultListModel<String> listModel,
+                                                 final int startIndex, final List<?> sourceList) {
+        for (int index = startIndex; index < sourceList.size(); index++) {
+            final Object element = sourceList.get(index);
+            if (element instanceof String stringElement) {
+                listModel.addElement(stringElement);
+            }
+        }
+    }
+
+    private void handleSingleResultAdded(final PropertyChangeEvent propertyChangeEvent) {
+        final Object newValue = propertyChangeEvent.getNewValue();
+        if (newValue instanceof String resultString) {
+            searchView.getCenterPanel().getListModel().addElement(resultString);
+        }
+    }
+
+    private void handleResultsBatchUpdate(final PropertyChangeEvent propertyChangeEvent) {
+        final Object newValue = propertyChangeEvent.getNewValue();
+        if (newValue instanceof List<?> resultsList) {
+            final DefaultListModel<String> listModel = searchView.getCenterPanel().getListModel();
+            addAllStringElementsToListModel(listModel, resultsList);
+        }
+    }
+
+    private void handleStatusUpdate(final PropertyChangeEvent propertyChangeEvent) {
+        final String newStatus = (String) propertyChangeEvent.getNewValue();
+        updateStatusDisplay(newStatus);
+    }
+
+    private void logUnknownProperty(final String propertyName) {
+        System.out.println("Unbekannte Property geändert: " + propertyName);
+    }
+
+    private void updateStatusDisplay(final String newStatusText) {
+        final boolean isSearchRunning = newStatusText != null && newStatusText.startsWith(SEARCH_RUNNING_TEXT);
+
+        if (isSearchRunning) {
             startDotAnimation();
         } else {
             stopDotAnimation();
         }
 
-        searchView.getBottomPanel().getStatusLabel().setText(newStatus);
-        searchView.updateButtons(runningNow);
+        searchView.getBottomPanel().updateStatus(newStatusText);
+        searchView.updateButtonStates(isSearchRunning);
     }
 
-    /**
-     * Startet die Animation der Punkte im Statuslabel.
-     */
     private void startDotAnimation() {
-        if (dotTimer == null) {
-            dotTimer = new Timer(250, e -> {
-                dotCount = (dotCount + 1) % 4;
-                searchView.getBottomPanel().getStatusLabel().setText(SEARCH_RUNNING_TEXT + ".".repeat(dotCount));
-            });
-
-            dotTimer.setInitialDelay(0);
+        if (dotAnimationTimer == null) {
+            dotAnimationTimer = createDotAnimationTimer();
         }
 
-        dotTimer.start();
+        if (!dotAnimationTimer.isRunning()) {
+            dotAnimationTimer.start();
+        }
     }
 
-    /**
-     * Stoppt die Animation der Punkte und setzt den Zähler zurück.
-     */
+    private Timer createDotAnimationTimer() {
+        final Timer timer = new Timer(DOT_ANIMATION_DELAY_MS, actionEvent -> {
+            dotAnimationCount = (dotAnimationCount + 1) % MAX_DOT_COUNT;
+            final String animatedStatusText = SEARCH_RUNNING_TEXT + ".".repeat(dotAnimationCount);
+            searchView.getBottomPanel().updateStatus(animatedStatusText);
+        });
+
+        timer.setInitialDelay(0);
+        return timer;
+    }
+
     private void stopDotAnimation() {
-        if (dotTimer != null && dotTimer.isRunning()) {
-            dotTimer.stop();
+        if (dotAnimationTimer != null && dotAnimationTimer.isRunning()) {
+            dotAnimationTimer.stop();
         }
 
-        dotCount = 0;
+        dotAnimationCount = 0;
     }
 
 }

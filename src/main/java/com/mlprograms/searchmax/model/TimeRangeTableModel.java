@@ -26,15 +26,15 @@ public class TimeRangeTableModel extends AbstractTableModel {
         public Mode mode;
     }
 
+    @Getter
     private final List<Entry> entries = new ArrayList<>();
     private final String[] cols = {GuiConstants.COLUMN_ACTIVE, GuiConstants.COLUMN_START, GuiConstants.COLUMN_END, GuiConstants.COLUMN_TIME_MODE, GuiConstants.COLUMN_REMOVE};
-
-    public List<Entry> getEntries() { return entries; }
 
     public void addEntry(Date start, Date end, Mode mode, boolean enabled) {
         // einfache, null-sichere Duplikat-Prüfung
         for (Entry e : entries) {
-            if (java.util.Objects.equals(e.start, start) && java.util.Objects.equals(e.end, end) && e.mode == mode) return;
+            if (java.util.Objects.equals(e.start, start) && java.util.Objects.equals(e.end, end) && e.mode == mode)
+                return;
         }
         entries.add(new Entry(enabled, start, end, mode));
         fireTableDataChanged();
@@ -52,11 +52,30 @@ public class TimeRangeTableModel extends AbstractTableModel {
         fireTableDataChanged();
     }
 
-    @Override public int getRowCount() { return entries.size(); }
-    @Override public int getColumnCount() { return cols.length; }
-    @Override public String getColumnName(int column) { return cols[column]; }
-    @Override public Class<?> getColumnClass(int columnIndex) { return columnIndex == 0 ? Boolean.class : String.class; }
-    @Override public boolean isCellEditable(int rowIndex, int columnIndex) { return columnIndex == 0 || columnIndex == 4; }
+    @Override
+    public int getRowCount() {
+        return entries.size();
+    }
+
+    @Override
+    public int getColumnCount() {
+        return cols.length;
+    }
+
+    @Override
+    public String getColumnName(int column) {
+        return cols[column];
+    }
+
+    @Override
+    public Class<?> getColumnClass(int columnIndex) {
+        return columnIndex == 0 ? Boolean.class : String.class;
+    }
+
+    @Override
+    public boolean isCellEditable(int rowIndex, int columnIndex) {
+        return columnIndex == 0 || columnIndex == 4;
+    }
 
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
@@ -74,11 +93,16 @@ public class TimeRangeTableModel extends AbstractTableModel {
         }
 
         switch (columnIndex) {
-            case 0: return e.enabled;
-            case 1: return e.start == null ? "" : dtf.format(e.start);
-            case 2: return e.end == null ? "" : dtf.format(e.end);
-            case 3: return e.mode.name();
-            default: return GuiConstants.COLUMN_REMOVE;
+            case 0:
+                return e.enabled;
+            case 1:
+                return e.start == null ? "" : dtf.format(e.start);
+            case 2:
+                return e.end == null ? "" : dtf.format(e.end);
+            case 3:
+                return e.mode.name();
+            default:
+                return GuiConstants.COLUMN_REMOVE;
         }
     }
 
@@ -92,5 +116,7 @@ public class TimeRangeTableModel extends AbstractTableModel {
         }
     }
 
-    public int getRemoveColumnIndex() { return 4; }
+    public int getRemoveColumnIndex() {
+        return 4;
+    }
 }

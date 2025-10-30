@@ -7,20 +7,29 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.function.IntConsumer;
 
-public class ButtonCellEditor extends AbstractCellEditor implements TableCellEditor, ActionListener {
-    private final JButton button = new JButton(GuiConstants.COLUMN_REMOVE);
-    private final IntConsumer removeAtConsumer;
-    private int editingRow = -1;
+public final class ButtonCellEditor extends AbstractCellEditor implements TableCellEditor, ActionListener {
 
-    public ButtonCellEditor(IntConsumer removeAtConsumer) {
-        this.removeAtConsumer = removeAtConsumer;
+    private final JButton button = new JButton(GuiConstants.COLUMN_REMOVE);
+    private final IntConsumer removeActionConsumer;
+    private int currentEditingRow = -1;
+
+    public ButtonCellEditor(final IntConsumer removeActionConsumer) {
+        this.removeActionConsumer = removeActionConsumer;
+        initializeButton();
+    }
+
+    private void initializeButton() {
         button.addActionListener(this);
+        button.setFocusPainted(false);
     }
 
     @Override
-    public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
-        this.editingRow = row;
-        button.setText(value == null ? GuiConstants.COLUMN_REMOVE : value.toString());
+    public Component getTableCellEditorComponent(final JTable table, final Object value,
+                                                 final boolean isSelected, final int row,
+                                                 final int column) {
+        this.currentEditingRow = row;
+        final String buttonText = value == null ? GuiConstants.COLUMN_REMOVE : value.toString();
+        button.setText(buttonText);
         return button;
     }
 
@@ -30,11 +39,24 @@ public class ButtonCellEditor extends AbstractCellEditor implements TableCellEdi
     }
 
     @Override
-    public void actionPerformed(ActionEvent e) {
-        if (removeAtConsumer != null && editingRow >= 0) {
-            removeAtConsumer.accept(editingRow);
+    public void actionPerformed(final ActionEvent actionEvent) {
+        if (removeActionConsumer != null && currentEditingRow >= 0) {
+            removeActionConsumer.accept(currentEditingRow);
         }
         fireEditingStopped();
-        editingRow = -1;
+        currentEditingRow = -1;
     }
+
+    @Override
+    public boolean stopCellEditing() {
+        currentEditingRow = -1;
+        return super.stopCellEditing();
+    }
+
+    @Override
+    public void cancelCellEditing() {
+        currentEditingRow = -1;
+        super.cancelCellEditing();
+    }
+
 }
