@@ -1,6 +1,8 @@
 package com.mlprograms.searchmax.model;
 
 import com.mlprograms.searchmax.view.GuiConstants;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 import javax.swing.table.AbstractTableModel;
 import java.text.DateFormat;
@@ -15,18 +17,13 @@ public class TimeRangeTableModel extends AbstractTableModel {
 
     public enum Mode {DATETIME, DATE, TIME}
 
+    @AllArgsConstructor
+    @Getter
     public static class Entry {
         public boolean enabled;
         public Date start;
         public Date end;
         public Mode mode;
-
-        public Entry(boolean enabled, Date start, Date end, Mode mode) {
-            this.enabled = enabled;
-            this.start = start;
-            this.end = end;
-            this.mode = mode;
-        }
     }
 
     private final List<Entry> entries = new ArrayList<>();
