@@ -162,9 +162,7 @@ public class TimeRangeInputDialog extends JDialog {
         setResizable(true);
         setLocationRelativeTo(getOwner());
 
-        // Adjust size to ensure proper visibility
         final Dimension preferredSize = getPreferredSize();
-        // Setze eine etwas kleinere Mindestbreite/-höhe für kompaktere Darstellung
         final int minWidth = Math.max(540, preferredSize.width + DIALOG_EXTRA_WIDTH);
         final int minHeight = Math.max(300, preferredSize.height + DIALOG_EXTRA_HEIGHT);
         setSize(minWidth, minHeight);
