@@ -1,5 +1,7 @@
-package com.mlprograms.searchmax.view;
+package com.mlprograms.searchmax.view.panel;
 
+import com.mlprograms.searchmax.view.GuiConstants;
+import com.mlprograms.searchmax.view.SearchView;
 import lombok.Getter;
 
 import javax.swing.*;

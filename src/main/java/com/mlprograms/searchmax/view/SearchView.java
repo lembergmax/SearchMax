@@ -5,6 +5,10 @@ import com.mlprograms.searchmax.controller.SearchController;
 import com.mlprograms.searchmax.model.SearchModel;
 import com.mlprograms.searchmax.model.TimeRangeTableModel;
 import com.mlprograms.searchmax.view.logging.InMemoryLogAppender;
+import com.mlprograms.searchmax.view.panel.BottomPanel;
+import com.mlprograms.searchmax.view.panel.CenterPanel;
+import com.mlprograms.searchmax.view.panel.DrivePanel;
+import com.mlprograms.searchmax.view.panel.TopPanel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.core.Appender;
@@ -243,7 +247,7 @@ public final class SearchView extends JFrame {
         });
     }
 
-    void onBrowseFolder() {
+    public void onBrowseFolder() {
         final JFileChooser directoryChooser = new JFileChooser();
         directoryChooser.setDialogTitle(GuiConstants.CHOOSER_SELECT_FOLDER);
         directoryChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -321,7 +325,7 @@ public final class SearchView extends JFrame {
         }
     }
 
-    void onSearch() {
+    public void onSearch() {
         final SearchParameters searchParameters = collectSearchParameters();
 
         if (!validateSearchParameters(searchParameters)) {
@@ -446,7 +450,7 @@ public final class SearchView extends JFrame {
         }
     }
 
-    void onCancelSearch() {
+    public void onCancelSearch() {
         if (searchController.cancelSearch()) {
             updateButtonStates(false);
         } else {
@@ -454,7 +458,7 @@ public final class SearchView extends JFrame {
         }
     }
 
-    void onManageFilters() {
+    public void onManageFilters() {
         final FiltersDialog filtersDialog = new FiltersDialog(
                 this, filenameIncludeFilters, filenameExcludeFilters, allowedFileExtensions, deniedFileExtensions,
                 filenameIncludeCaseMap, filenameExcludeCaseMap, filenameIncludeAllMode,
@@ -504,7 +508,7 @@ public final class SearchView extends JFrame {
         contentIncludeAllMode = filtersDialog.isContentIncludeAllMode();
     }
 
-    void updateFolderFieldState() {
+    public void updateFolderFieldState() {
         if (isSearchRunning) {
             topPanel.getFolderPathTextField().setEnabled(false);
             topPanel.getBrowseFolderButton().setEnabled(false);
