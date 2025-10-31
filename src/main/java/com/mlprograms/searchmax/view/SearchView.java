@@ -28,10 +28,6 @@ import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * Hauptansicht für die SearchMax-Anwendung.
- * Verwaltet die UI-Komponenten, das Laden und Speichern der Einstellungen sowie die Interaktion mit Controller und Model.
- */
 @Slf4j
 @Getter
 public final class SearchView extends JFrame {
