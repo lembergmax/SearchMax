@@ -108,29 +108,4 @@ public final class BottomPanel extends JPanel {
         statusLabel.setText(statusMessage);
     }
 
-    public void showProgressBar(final boolean visible) {
-        progressBar.setVisible(visible);
-    }
-
-    public void setProgressBarIndeterminate(final boolean indeterminate) {
-        progressBar.setIndeterminate(indeterminate);
-    }
-
-    public void setProgressBarValue(final int value) {
-        progressBar.setValue(value);
-    }
-
-    public void setProgressBarRange(final int minimum, final int maximum) {
-        progressBar.setMinimum(minimum);
-        progressBar.setMaximum(maximum);
-    }
-
-    public boolean isPerformanceModeEnabled() {
-        return performanceModeCheckbox.isSelected();
-    }
-
-    public void setPerformanceModeEnabled(final boolean enabled) {
-        performanceModeCheckbox.setSelected(enabled);
-    }
-
 }

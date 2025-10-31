@@ -101,18 +101,6 @@ public final class InMemoryLogAppender extends AbstractAppender {
         logBuffer.clear();
     }
 
-    public int getLogMessageCount() {
-        return logBuffer.size();
-    }
-
-    public int getBufferCapacity() {
-        return DEFAULT_BUFFER_CAPACITY;
-    }
-
-    public boolean isBufferFull() {
-        return logBuffer.remainingCapacity() == 0;
-    }
-
     @PluginFactory
     public static InMemoryLogAppender createAppender(
             @PluginAttribute("name") @Required final String name,
