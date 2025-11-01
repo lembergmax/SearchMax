@@ -5,19 +5,6 @@ by filename, file content, and file extensions, along with tools for exporting o
 
 ---
 
-## Table of Contents
-
-* Overview
-* Key Features
-* Typical Workflow
-* Screenshots *(optional)*
-* User Interface Walkthrough
-* Tips & Best Practices
-* Troubleshooting *(optional)*
-* License
-
----
-
 ## Overview
 
 SearchMax helps power users, developers, and administrators locate files quickly across multiple directories or drives.
@@ -38,24 +25,9 @@ efficient workflow.
     * Wildcard and pattern-based filename matching.
     * Include/exclude rules for file content or names.
 * Extension allow/deny lists for targeted or restricted searches.
-* Optional extraction:
-
-    * Copy/export matched files to a destination of your choice.
-    * Options for structure preservation, conflict handling, and overwrite behavior.
 * Cancellable and non-blocking search process with live progress updates.
 * Results table with batch operations (open folder, copy path, export selected files).
 * Built-in log viewer for errors, permission issues, and diagnostic details.
-
----
-
-## Typical Workflow
-
-1. Select one or more drives or folders as the search scope.
-2. Define filename filters and optional content filters.
-3. Adjust extension allow/deny lists if needed.
-4. (Optional) Configure extraction settings.
-5. Start the search and monitor progress in real time.
-6. Review results and perform actions such as opening locations or exporting files.
 
 ---
 
@@ -78,8 +50,6 @@ efficient workflow.
 
 ---
 
-## User Interface Walkthrough
-
 ### Drive Selection
 
 Choose one or more drives or directories to include in the search. If access to a location is restricted, the
@@ -94,14 +64,6 @@ individually to test different configurations.
 
 Specify which file types to include or exclude. Useful for narrowing searches to text files or ignoring large binary
 formats.
-
-### Extraction Settings *(optional)*
-
-If exporting matched files:
-
-* Choose destination folder.
-* Preserve directory structure or flatten output.
-* Configure conflict handling (skip, overwrite, rename).
 
 ### Running a Search & Monitoring Progress
 
@@ -119,18 +81,3 @@ Search results appear in a sortable table. You can:
 ### Logging & Diagnostics
 
 The log viewer provides informational messages, warnings, errors, and access issues encountered during the search.
-
----
-
-## Tips & Best Practices
-
-* Start with broader filters, then refine.
-* Use extension filters to avoid scanning large binary files unless necessary.
-* Disable filters temporarily to test how they affect results.
-* Use the log viewer to diagnose access-related issues on restricted drives.
-
----
-
-## License
-
-*TODO: Add license information (e.g., MIT, Apache-2.0, GPL, etc.).*
