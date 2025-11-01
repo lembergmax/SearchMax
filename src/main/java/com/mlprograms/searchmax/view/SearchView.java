@@ -1,9 +1,19 @@
 package com.mlprograms.searchmax.view;
 
+import com.mlprograms.searchmax.ExtractionMode;
 import com.mlprograms.searchmax.controller.SearchController;
 import com.mlprograms.searchmax.model.SearchModel;
+import com.mlprograms.searchmax.model.TimeRangeTableModel;
+import com.mlprograms.searchmax.view.logging.InMemoryLogAppender;
+import com.mlprograms.searchmax.view.panel.BottomPanel;
+import com.mlprograms.searchmax.view.panel.CenterPanel;
+import com.mlprograms.searchmax.view.panel.DrivePanel;
+import com.mlprograms.searchmax.view.panel.TopPanel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -22,104 +32,111 @@ import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * Die Hauptansicht für die SearchMax-Anwendung.
- * Verwaltet die UI-Komponenten, das Laden und Speichern der Einstellungen sowie die Interaktion mit dem Controller und Model.
- */
 @Slf4j
 @Getter
 public final class SearchView extends JFrame {
 
-    private final SearchController controller;
-    private final SearchModel model;
+    private record FilterSet(List<String> includes, Map<String, Boolean> includesCase, List<String> excludes,
+                             Map<String, Boolean> excludesCase) {
+    }
 
-    /**
-     * Pfad zur Datei, in der die Einstellungen gespeichert werden.
-     */
-    private final Path settingsFile = Paths.get(System.getProperty("user.home"), ".searchmax.properties");
+    private record SearchParameters(String folderPath, String searchQuery, List<String> selectedDrives,
+                                    boolean caseSensitive, List<String> allowedExtensions,
+                                    List<String> deniedExtensions, FilterSet filenameFilters,
+                                    FilterSet contentFilters) {
 
-    /**
-     * Panel zur Auswahl der Laufwerke.
-     */
+        public List<String> getFilenameIncludes() {
+            return filenameFilters.includes;
+        }
+
+        public Map<String, Boolean> getFilenameIncludeCaseMap() {
+            return filenameFilters.includesCase;
+        }
+
+        public List<String> getFilenameExcludes() {
+            return filenameFilters.excludes;
+        }
+
+        public Map<String, Boolean> getFilenameExcludeCaseMap() {
+            return filenameFilters.excludesCase;
+        }
+
+        public List<String> getContentIncludes() {
+            return contentFilters.includes;
+        }
+
+        public Map<String, Boolean> getContentIncludeCaseMap() {
+            return contentFilters.includesCase;
+        }
+
+        public List<String> getContentExcludes() {
+            return contentFilters.excludes;
+        }
+
+        public Map<String, Boolean> getContentExcludeCaseMap() {
+            return contentFilters.excludesCase;
+        }
+    }
+
+    private static final String SETTINGS_FILENAME = ".searchmax.properties";
+    private static final String PROPERTY_START_FOLDER = "startFolder";
+    private static final String PROPERTY_QUERY = "query";
+    private static final String PROPERTY_CASE_SENSITIVE = "caseSensitive";
+    private static final String PROPERTY_DRIVES = "drives";
+    private static final String PROPERTY_INCLUDES = "includes";
+    private static final String PROPERTY_EXCLUDES = "excludes";
+    private static final String PROPERTY_INCLUDES_CASE = "includesCase";
+    private static final String PROPERTY_EXCLUDES_CASE = "excludesCase";
+    private static final String PROPERTY_EXTENSIONS_ALLOW = "extensionsAllow";
+    private static final String PROPERTY_EXTENSIONS_DENY = "extensionsDeny";
+    private static final String PROPERTY_CONTENT_INCLUDES = "contentIncludes";
+    private static final String PROPERTY_CONTENT_EXCLUDES = "contentExcludes";
+    private static final String PROPERTY_CONTENT_INCLUDES_CASE = "contentIncludesCase";
+    private static final String PROPERTY_CONTENT_EXCLUDES_CASE = "contentExcludesCase";
+    private static final String PROPERTY_TIME_INCLUDES = "timeIncludes";
+    private static final String PROPERTY_TIME_EXCLUDES = "timeExcludes";
+    private static final String PROPERTY_TIME_INCLUDES_MODE = "timeIncludesMode";
+    private static final String PROPERTY_INCLUDES_MODE = "includesMode";
+    private static final String PROPERTY_CONTENT_INCLUDES_MODE = "contentIncludesMode";
+    private static final String PROPERTY_USE_ALL_CORES = "useAllCores";
+    private static final String PROPERTY_EXTRACTION_MODE = "extractionMode";
+
+    private final SearchController searchController;
+    private final SearchModel searchModel;
+    private final Path settingsFilePath = Paths.get(System.getProperty("user.home"), SETTINGS_FILENAME);
     private final DrivePanel drivePanel;
-    /**
-     * Panel für die oberen Bedienelemente (Suchfeld, Buttons).
-     */
     private final TopPanel topPanel;
-    /**
-     * Panel für die Anzeige der Suchergebnisse.
-     */
     private final CenterPanel centerPanel;
-    /**
-     * Panel für die unteren Bedienelemente (Status, Fortschritt).
-     */
     private final BottomPanel bottomPanel;
-    /**
-     * Hilfsklasse zur Aktualisierung des Status in der UI.
-     */
     private final StatusUpdater statusUpdater;
 
-    /**
-     * Log-Viewer Instanz (wird beim Öffnen gesetzt, null wenn geschlossen)
-     */
     private LogViewer logViewer = null;
+    private boolean isSearchRunning = false;
 
-    /**
-     * Gibt an, ob aktuell eine Suche läuft.
-     */
-    private boolean running = false;
+    // Filter-Zustände
+    private final Map<String, Boolean> filenameIncludeFilters = new LinkedHashMap<>();
+    private final Map<String, Boolean> filenameExcludeFilters = new LinkedHashMap<>();
+    private final Map<String, Boolean> filenameIncludeCaseMap = new LinkedHashMap<>();
+    private final Map<String, Boolean> filenameExcludeCaseMap = new LinkedHashMap<>();
+    private final Map<String, Boolean> allowedFileExtensions = new LinkedHashMap<>();
+    private final Map<String, Boolean> deniedFileExtensions = new LinkedHashMap<>();
+    private final Map<String, Boolean> contentIncludeFilters = new LinkedHashMap<>();
+    private final Map<String, Boolean> contentExcludeFilters = new LinkedHashMap<>();
+    private final Map<String, Boolean> contentIncludeCaseMap = new LinkedHashMap<>();
+    private final Map<String, Boolean> contentExcludeCaseMap = new LinkedHashMap<>();
+    private final List<TimeRangeTableModel.Entry> timeIncludeRanges = new ArrayList<>();
+    private final List<TimeRangeTableModel.Entry> timeExcludeRanges = new ArrayList<>();
 
-    /**
-     * Bekannte "Enthält"-Filter.
-     */
-    private final Map<String, Boolean> knownIncludes = new LinkedHashMap<>();
-    /**
-     * Bekannte "Enthält nicht"-Filter.
-     */
-    private final Map<String, Boolean> knownExcludes = new LinkedHashMap<>();
-    /**
-     * Groß-/Kleinschreibung für "Enthält"-Filter.
-     */
-    private final Map<String, Boolean> knownIncludesCase = new LinkedHashMap<>();
-    /**
-     * Groß-/Kleinschreibung für "Enthält nicht"-Filter.
-     */
-    private final Map<String, Boolean> knownExcludesCase = new LinkedHashMap<>();
-    /**
-     * Erlaubte Dateiendungen.
-     */
-    private final Map<String, Boolean> knownExtensionsAllow = new LinkedHashMap<>();
-    /**
-     * Nicht erlaubte Dateiendungen.
-     */
-    private final Map<String, Boolean> knownExtensionsDeny = new LinkedHashMap<>();
-
-    // Content (Dateiinhalt) filter state
-    private final Map<String, Boolean> knownContentIncludes = new LinkedHashMap<>();
-    private final Map<String, Boolean> knownContentExcludes = new LinkedHashMap<>();
-    private final Map<String, Boolean> knownContentIncludesCase = new LinkedHashMap<>();
-    private final Map<String, Boolean> knownContentExcludesCase = new LinkedHashMap<>();
-    private boolean knownIncludesAllMode = false;
-    private boolean knownContentIncludesAllMode = false;
-
-    // Zeitfilter: bekannte Einträge (werden als TimeRangeTableModel.Entry gespeichert)
-    private java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> knownTimeIncludes = new java.util.ArrayList<>();
-    private java.util.List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> knownTimeExcludes = new java.util.ArrayList<>();
-    private boolean knownTimeIncludesAllMode = false;
+    private boolean filenameIncludeAllMode = false;
+    private boolean contentIncludeAllMode = false;
+    private boolean timeIncludeAllMode = false;
     private boolean useAllCores = false;
-    private com.mlprograms.searchmax.ExtractionMode extractionMode = com.mlprograms.searchmax.ExtractionMode.POI_THEN_TIKA;
+    private ExtractionMode extractionMode = ExtractionMode.POI_THEN_TIKA;
 
-    /**
-     * Konstruktor für die SearchView.
-     * Initialisiert die UI-Komponenten, lädt Einstellungen und bindet das Model.
-     *
-     * @param controller Der zugehörige Controller
-     * @param model      Das zugehörige Model
-     */
-    public SearchView(final SearchController controller, final SearchModel model) {
+    public SearchView(final SearchController searchController, final SearchModel searchModel) {
         super(GuiConstants.TITLE_SEARCHMAX);
-        this.controller = controller;
-        this.model = model;
+        this.searchController = searchController;
+        this.searchModel = searchModel;
 
         this.drivePanel = new DrivePanel(this);
         this.topPanel = new TopPanel(this);
@@ -127,34 +144,81 @@ public final class SearchView extends JFrame {
         this.bottomPanel = new BottomPanel(this);
         this.statusUpdater = new StatusUpdater(this);
 
-        initUI();
-        bindModel();
-        loadSettings();
+        initializeUserInterface();
+        bindModelToView();
+        loadApplicationSettings();
+        initializeAutoSaveListeners();
+        initializeForceClickSupport();
+    }
 
-        // Autosave on key UI changes so settings persist exactly as configured
-        topPanel.getQueryField().getDocument().addDocumentListener(new DocumentListener() {
-            private void onChange() { saveExtensionsToSettings(); }
-            @Override public void insertUpdate(DocumentEvent e) { onChange(); }
-            @Override public void removeUpdate(DocumentEvent e) { onChange(); }
-            @Override public void changedUpdate(DocumentEvent e) { onChange(); }
-        });
-        topPanel.getFolderField().getDocument().addDocumentListener(new DocumentListener() {
-            private void onChange() { saveExtensionsToSettings(); }
-            @Override public void insertUpdate(DocumentEvent e) { onChange(); }
-            @Override public void removeUpdate(DocumentEvent e) { onChange(); }
-            @Override public void changedUpdate(DocumentEvent e) { onChange(); }
-        });
-        topPanel.getCaseSensitiveCheck().addActionListener(e -> saveExtensionsToSettings());
+    private void initializeUserInterface() {
+        setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
-        bottomPanel.getPerformanceModeCheck().addActionListener(e -> {
-            useAllCores = bottomPanel.getPerformanceModeCheck().isSelected();
-            controller.setUseAllCores(useAllCores);
-            saveExtensionsToSettings();
+        final Container contentContainer = getContentPane();
+        contentContainer.setLayout(new BorderLayout(6, 6));
+        contentContainer.add(topPanel, BorderLayout.NORTH);
+        contentContainer.add(centerPanel, BorderLayout.CENTER);
+        contentContainer.add(bottomPanel, BorderLayout.SOUTH);
+
+        topPanel.initializeEventListeners();
+        updateButtonStates(false);
+        updateFolderFieldState();
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(final WindowEvent windowEvent) {
+                saveApplicationSettings();
+            }
         });
 
-        // TODO: irgendwie anders lösen
+        pack();
+        setMinimumSize(new Dimension(700, 400));
+        setSize(800, 600);
+        setLocationRelativeTo(null);
+
+        SwingUtilities.invokeLater(() -> topPanel.getSearchQueryTextField().requestFocusInWindow());
+    }
+
+    private void bindModelToView() {
+        searchModel.addPropertyChangeListener(statusUpdater::onModelChange);
+    }
+
+    private void initializeAutoSaveListeners() {
+        final DocumentListener autoSaveListener = new DocumentListener() {
+            private void triggerAutoSave() {
+                saveApplicationSettings();
+            }
+
+            @Override
+            public void insertUpdate(final DocumentEvent documentEvent) {
+                triggerAutoSave();
+            }
+
+            @Override
+            public void removeUpdate(final DocumentEvent documentEvent) {
+                triggerAutoSave();
+            }
+
+            @Override
+            public void changedUpdate(final DocumentEvent documentEvent) {
+                triggerAutoSave();
+            }
+        };
+
+        topPanel.getSearchQueryTextField().getDocument().addDocumentListener(autoSaveListener);
+        topPanel.getFolderPathTextField().getDocument().addDocumentListener(autoSaveListener);
+
+        topPanel.getCaseSensitiveCheckbox().addActionListener(actionEvent -> saveApplicationSettings());
+        bottomPanel.getPerformanceModeCheckbox().addActionListener(actionEvent -> {
+            useAllCores = bottomPanel.getPerformanceModeCheckbox().isSelected();
+            searchController.setUseAllCores(useAllCores);
+            saveApplicationSettings();
+        });
+    }
+
+    private void initializeForceClickSupport() {
         SwingUtilities.invokeLater(() -> {
-            Consumer<Component> attachDoClick = new Consumer<>() {
+            final Consumer<Component> installForceClick = new Consumer<>() {
                 @Override
                 public void accept(final Component component) {
                     if (component instanceof AbstractButton abstractButton) {
@@ -172,77 +236,40 @@ public final class SearchView extends JFrame {
                     }
 
                     if (component instanceof Container container) {
-                        for (Component innerComponent : container.getComponents()) {
+                        for (final Component innerComponent : container.getComponents()) {
                             accept(innerComponent);
                         }
                     }
                 }
             };
 
-            attachDoClick.accept(getContentPane());
+            installForceClick.accept(getContentPane());
         });
     }
 
-    /**
-     * Initialisiert die Benutzeroberfläche und deren Layout.
-     */
-    private void initUI() {
-        setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+    public void onBrowseFolder() {
+        final JFileChooser directoryChooser = new JFileChooser();
+        directoryChooser.setDialogTitle(GuiConstants.CHOOSER_SELECT_FOLDER);
+        directoryChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        directoryChooser.setAcceptAllFileFilterUsed(false);
 
-        final Container container = getContentPane();
-        container.setLayout(new BorderLayout(6, 6));
-        container.add(topPanel, BorderLayout.NORTH);
-        container.add(centerPanel, BorderLayout.CENTER);
-        container.add(bottomPanel, BorderLayout.SOUTH);
-
-        topPanel.addListeners();
-        updateButtons(false);
-        updateFolderFieldState();
-
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosing(final WindowEvent windowEvent) {
-                saveExtensionsToSettings();
-            }
-        });
-
-        pack();
-        setMinimumSize(new Dimension(700, 400));
-        setSize(800, 600);
-        setLocationRelativeTo(null);
-
-        SwingUtilities.invokeLater(() -> topPanel.getQueryField().requestFocusInWindow());
-    }
-
-    /**
-     * Öffnet einen Dialog zum Auswählen eines Ordners.
-     */
-    void onBrowse() {
-        final JFileChooser jFileChooser = new JFileChooser();
-        jFileChooser.setDialogTitle(GuiConstants.CHOOSER_SELECT_FOLDER);
-        jFileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        jFileChooser.setAcceptAllFileFilterUsed(false);
-
-        final String path = topPanel.getFolderField().getText();
-        if (path != null && !path.isBlank()) {
-            final File directory = new File(path);
-            if (directory.exists() && directory.isDirectory()) {
-                jFileChooser.setCurrentDirectory(directory);
+        final String currentPath = topPanel.getFolderPathTextField().getText();
+        if (currentPath != null && !currentPath.isBlank()) {
+            final File currentDirectory = new File(currentPath);
+            if (currentDirectory.exists() && currentDirectory.isDirectory()) {
+                directoryChooser.setCurrentDirectory(currentDirectory);
             }
         }
 
-        if (jFileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            final File selected = jFileChooser.getSelectedFile();
-            if (selected != null && selected.isDirectory()) {
-                topPanel.getFolderField().setText(selected.getAbsolutePath());
-                saveExtensionsToSettings();
+        if (directoryChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            final File selectedDirectory = directoryChooser.getSelectedFile();
+            if (selectedDirectory != null && selectedDirectory.isDirectory()) {
+                topPanel.getFolderPathTextField().setText(selectedDirectory.getAbsolutePath());
+                saveApplicationSettings();
             }
         }
     }
 
-    /**
-     * Zeigt das Log-Viewer-Fenster an. Nutzt den InMemoryLogAppender, welcher in log4j2.xml konfiguriert sein muss.
-     */
     public void onShowLogs() {
         try {
             if (logViewer != null) {
@@ -251,539 +278,535 @@ public final class SearchView extends JFrame {
                 return;
             }
 
-            org.apache.logging.log4j.core.LoggerContext ctx = org.apache.logging.log4j.core.LoggerContext.getContext(false);
-            org.apache.logging.log4j.core.config.Configuration cfg = ctx.getConfiguration();
-            org.apache.logging.log4j.core.Appender app = cfg.getAppender("InMemory");
-            if (app instanceof com.mlprograms.searchmax.view.logging.InMemoryLogAppender inMemory) {
-                logViewer = new LogViewer(inMemory);
+            final LoggerContext loggerContext =
+                    LoggerContext.getContext(false);
+            final Configuration configuration = loggerContext.getConfiguration();
+            final Appender appender = configuration.getAppender("InMemory");
+
+            if (appender instanceof InMemoryLogAppender inMemoryLogAppender) {
+                logViewer = new LogViewer(inMemoryLogAppender);
                 logViewer.setVisible(true);
                 logViewer.addWindowListener(new java.awt.event.WindowAdapter() {
                     @Override
-                    public void windowClosed(java.awt.event.WindowEvent e) {
+                    public void windowClosed(final java.awt.event.WindowEvent windowEvent) {
                         logViewer = null;
                     }
                 });
             } else {
-                JOptionPane.showMessageDialog(this, GuiConstants.MSG_INMEMORY_APPENDER_NOT_FOUND, GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, GuiConstants.MSG_INMEMORY_APPENDER_NOT_FOUND,
+                        GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
             }
-        } catch (Exception ex) {
-            log.warn("Fehler beim Öffnen des Log-Viewers", ex);
-            JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_LOGVIEWER_PREFIX + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+        } catch (final Exception exception) {
+            log.warn("Fehler beim Öffnen des Log-Viewers", exception);
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_LOGVIEWER_PREFIX + exception.getMessage(),
+                    GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
         }
     }
 
     public void onShowSettings() {
         try {
-            ExtractionSettingsDialog dlg = new ExtractionSettingsDialog(this, extractionMode);
-            dlg.setVisible(true);
-            com.mlprograms.searchmax.ExtractionMode sel = dlg.getSelected();
-            if (sel != null) {
-                extractionMode = sel;
-                // propagate to service
+            final ExtractionSettingsDialog settingsDialog = new ExtractionSettingsDialog(this, extractionMode);
+            settingsDialog.setVisible(true);
+            final ExtractionMode selectedMode = settingsDialog.getSelectedExtractionMode();
+
+            if (selectedMode != null) {
+                extractionMode = selectedMode;
                 try {
-                    controller.setExtractionMode(extractionMode);
-                } catch (Exception e) {
-                    log.warn("Fehler beim Setzen des ExtractionMode", e);
+                    searchController.setExtractionMode(extractionMode);
+                } catch (final Exception exception) {
+                    log.warn("Fehler beim Setzen des ExtractionMode", exception);
                 }
-                // persist selection immediately
-                saveExtensionsToSettings();
+                saveApplicationSettings();
             }
-        } catch (Exception ex) {
-            log.warn("Fehler beim Öffnen der Settings", ex);
-            JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_SETTINGS_PREFIX + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+        } catch (final Exception exception) {
+            log.warn("Fehler beim Öffnen der Einstellungen", exception);
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_SETTINGS_PREFIX + exception.getMessage(),
+                    GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    /**
-     * Startet die Suche mit den aktuellen Filter- und Sucheinstellungen.
-     */
-    void onSearch() {
+    public void onSearch() {
+        final SearchParameters searchParameters = collectSearchParameters();
+
+        if (!validateSearchParameters(searchParameters)) {
+            return;
+        }
+
+        searchController.startSearch(
+                searchParameters.folderPath(),
+                searchParameters.searchQuery(),
+                searchParameters.selectedDrives(),
+                searchParameters.caseSensitive(),
+                searchParameters.allowedExtensions(),
+                searchParameters.deniedExtensions(),
+                searchParameters.getFilenameIncludes(),
+                searchParameters.getFilenameIncludeCaseMap(),
+                searchParameters.getFilenameExcludes(),
+                searchParameters.getFilenameExcludeCaseMap(),
+                filenameIncludeAllMode,
+                searchParameters.getContentIncludes(),
+                searchParameters.getContentIncludeCaseMap(),
+                searchParameters.getContentExcludes(),
+                searchParameters.getContentExcludeCaseMap(),
+                contentIncludeAllMode,
+                timeIncludeRanges,
+                timeExcludeRanges,
+                timeIncludeAllMode
+        );
+    }
+
+    private SearchParameters collectSearchParameters() {
         final List<String> selectedDrives = drivePanel.getSelectedDrives();
-        final String folder = topPanel.getFolderField().getText();
-        final String query = topPanel.getQueryField().getText();
-        final boolean caseSensitive = topPanel.getCaseSensitiveCheck().isSelected();
+        final String folderPath = topPanel.getFolderPathTextField().getText();
+        final String searchQuery = topPanel.getSearchQueryTextField().getText();
+        final boolean caseSensitive = topPanel.getCaseSensitiveCheckbox().isSelected();
 
-        final List<String> extensionsAllow = new ArrayList<>();
-        final List<String> extensionsDeny = new ArrayList<>();
+        final List<String> allowedExtensions = extractActiveFilters(allowedFileExtensions);
+        final List<String> deniedExtensions = extractActiveFilters(deniedFileExtensions);
 
-        for (Map.Entry<String, Boolean> entry : knownExtensionsAllow.entrySet()) {
+        final FilterSet filenameFilters = extractFilterSet(filenameIncludeFilters, filenameIncludeCaseMap,
+                filenameExcludeFilters, filenameExcludeCaseMap);
+        final FilterSet contentFilters = extractFilterSet(contentIncludeFilters, contentIncludeCaseMap,
+                contentExcludeFilters, contentExcludeCaseMap);
+
+        return new SearchParameters(folderPath, searchQuery, selectedDrives, caseSensitive,
+                allowedExtensions, deniedExtensions, filenameFilters, contentFilters);
+    }
+
+    private boolean validateSearchParameters(final SearchParameters parameters) {
+        if (!parameters.selectedDrives().isEmpty()) {
+            return validateDriveSearchParameters(parameters);
+        } else {
+            return validateFolderSearchParameters(parameters);
+        }
+    }
+
+    private boolean validateDriveSearchParameters(final SearchParameters parameters) {
+        if (!hasActiveSearchFilters(parameters)) {
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_ENTER_QUERY_OR_TYPE,
+                    GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean validateFolderSearchParameters(final SearchParameters parameters) {
+        if (parameters.folderPath() == null || parameters.folderPath().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_START_FOLDER,
+                    GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+
+        if (!hasActiveSearchFilters(parameters)) {
+            JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_QUERY_OR_TYPE_OR_FILTER,
+                    GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean hasActiveSearchFilters(final SearchParameters parameters) {
+        return !(parameters.searchQuery() == null || parameters.searchQuery().trim().isEmpty())
+                || !parameters.allowedExtensions().isEmpty()
+                || !parameters.getFilenameIncludes().isEmpty()
+                || !parameters.getContentIncludes().isEmpty()
+                || !parameters.getContentExcludes().isEmpty()
+                || hasActiveTimeFilter(timeIncludeRanges)
+                || hasActiveTimeFilter(timeExcludeRanges);
+    }
+
+    private List<String> extractActiveFilters(final Map<String, Boolean> filterMap) {
+        final List<String> activeFilters = new ArrayList<>();
+        for (final Map.Entry<String, Boolean> entry : filterMap.entrySet()) {
             if (Boolean.TRUE.equals(entry.getValue())) {
-                extensionsAllow.add(entry.getKey());
+                activeFilters.add(entry.getKey());
             }
         }
-        for (Map.Entry<String, Boolean> entry : knownExtensionsDeny.entrySet()) {
-            if (Boolean.TRUE.equals(entry.getValue())) {
-                extensionsDeny.add(entry.getKey());
-            }
-        }
+        return activeFilters;
+    }
 
+    private FilterSet extractFilterSet(final Map<String, Boolean> includeMap, final Map<String, Boolean> includeCaseMap,
+                                       final Map<String, Boolean> excludeMap, final Map<String, Boolean> excludeCaseMap) {
         final List<String> includes = new ArrayList<>();
         final Map<String, Boolean> includesCase = new LinkedHashMap<>();
         final List<String> excludes = new ArrayList<>();
         final Map<String, Boolean> excludesCase = new LinkedHashMap<>();
 
-        filterActiveEntries(includes, includesCase, knownIncludes, knownIncludesCase);
-        filterActiveEntries(excludes, excludesCase, knownExcludes, knownExcludesCase);
+        extractActiveFiltersWithCase(includeMap, includeCaseMap, includes, includesCase);
+        extractActiveFiltersWithCase(excludeMap, excludeCaseMap, excludes, excludesCase);
 
-        // Content filters
-        final List<String> contentIncludes = new ArrayList<>();
-        final Map<String, Boolean> contentIncludesCase = new LinkedHashMap<>();
-        final List<String> contentExcludes = new ArrayList<>();
-        final Map<String, Boolean> contentExcludesCase = new LinkedHashMap<>();
-        filterActiveEntries(contentIncludes, contentIncludesCase, knownContentIncludes, knownContentIncludesCase);
-        filterActiveEntries(contentExcludes, contentExcludesCase, knownContentExcludes, knownContentExcludesCase);
-
-        if (!selectedDrives.isEmpty()) {
-            boolean hasAnyFilter = !(query == null || query.trim().isEmpty())
-                    || !extensionsAllow.isEmpty()
-                    || !includes.isEmpty()
-                    || !contentIncludes.isEmpty()
-                    || !contentExcludes.isEmpty()
-                    || hasActiveTimeFilter(knownTimeIncludes)
-                    || hasActiveTimeFilter(knownTimeExcludes);
-            if (!hasAnyFilter) {
-                JOptionPane.showMessageDialog(this, GuiConstants.MSG_ENTER_QUERY_OR_TYPE, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-            controller.startSearch("", query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, knownContentIncludesAllMode, knownTimeIncludes, knownTimeExcludes, knownTimeIncludesAllMode);
-            return;
-        }
-
-        if (folder == null || folder.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_START_FOLDER, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        boolean hasAnyFilter = !(query == null || query.trim().isEmpty())
-                || !extensionsAllow.isEmpty()
-                || !includes.isEmpty()
-                || !contentIncludes.isEmpty()
-                || !contentExcludes.isEmpty()
-                || hasActiveTimeFilter(knownTimeIncludes)
-                || hasActiveTimeFilter(knownTimeExcludes);
-        if (!hasAnyFilter) {
-            JOptionPane.showMessageDialog(this, GuiConstants.MSG_PLEASE_QUERY_OR_TYPE_OR_FILTER, GuiConstants.MSG_MISSING_INPUT_TITLE, JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        controller.startSearch(folder.trim(), query == null ? "" : query.trim(), selectedDrives, caseSensitive, extensionsAllow, extensionsDeny, includes, includesCase, excludes, excludesCase, knownIncludesAllMode, contentIncludes, contentIncludesCase, contentExcludes, contentExcludesCase, knownContentIncludesAllMode, knownTimeIncludes, knownTimeExcludes, knownTimeIncludesAllMode);
+        return new FilterSet(includes, includesCase, excludes, excludesCase);
     }
 
-    /**
-     * Filtert aktive Einträge aus den bekannten Filtern und überträgt sie in die Ziel-Listen/Maps.
-     *
-     * @param list         Ziel-Liste für aktive Filter
-     * @param mapCase      Ziel-Map für Groß-/Kleinschreibung
-     * @param mapKnown     Quell-Map der bekannten Filter
-     * @param mapKnownCase Quell-Map der Groß-/Kleinschreibung
-     */
-    private void filterActiveEntries(final List<String> list, final Map<String, Boolean> mapCase, final Map<String, Boolean> mapKnown, final Map<String, Boolean> mapKnownCase) {
-        for (final Map.Entry<String, Boolean> entry : mapKnown.entrySet()) {
+    private void extractActiveFiltersWithCase(final Map<String, Boolean> sourceMap, final Map<String, Boolean> sourceCaseMap,
+                                              final List<String> targetList, final Map<String, Boolean> targetCaseMap) {
+        for (final Map.Entry<String, Boolean> entry : sourceMap.entrySet()) {
             if (Boolean.TRUE.equals(entry.getValue())) {
-                String key = entry.getKey();
-                list.add(key);
-                mapCase.put(key, Boolean.TRUE.equals(mapKnownCase.get(key)));
+                final String filterKey = entry.getKey();
+                targetList.add(filterKey);
+                targetCaseMap.put(filterKey, Boolean.TRUE.equals(sourceCaseMap.get(filterKey)));
             }
         }
     }
 
-    /**
-     * Bricht die laufende Suche ab.
-     */
-    void onCancel() {
-        if (controller.cancelSearch()) {
-            updateButtons(false);
+    public void onCancelSearch() {
+        if (searchController.cancelSearch()) {
+            updateButtonStates(false);
         } else {
             updateFolderFieldState();
         }
     }
 
-    /**
-     * Öffnet den Filter-Dialog und übernimmt ggf. die neuen Filtereinstellungen.
-     */
-    void onManageFilters() {
-        final FiltersDialog filtersDialog = new FiltersDialog(this, knownIncludes, knownExcludes, knownExtensionsAllow, knownExtensionsDeny, knownIncludesCase, knownExcludesCase, knownIncludesAllMode, knownContentIncludes, knownContentExcludes, knownContentIncludesCase, knownContentExcludesCase, knownContentIncludesAllMode, knownTimeIncludes, knownTimeExcludes, knownTimeIncludesAllMode);
+    public void onManageFilters() {
+        final FiltersDialog filtersDialog = new FiltersDialog(
+                this, filenameIncludeFilters, filenameExcludeFilters, allowedFileExtensions, deniedFileExtensions,
+                filenameIncludeCaseMap, filenameExcludeCaseMap, filenameIncludeAllMode,
+                contentIncludeFilters, contentExcludeFilters, contentIncludeCaseMap, contentExcludeCaseMap, contentIncludeAllMode,
+                timeIncludeRanges, timeExcludeRanges, timeIncludeAllMode
+        );
+
         filtersDialog.setVisible(true);
 
         if (filtersDialog.isConfirmed()) {
-            Map<String, Boolean> include = filtersDialog.getIncludesMap();
-            Map<String, Boolean> exclude = filtersDialog.getExcludesMap();
-            Map<String, Boolean> incCase = filtersDialog.getIncludesCaseMap();
-            Map<String, Boolean> excCase = filtersDialog.getExcludesCaseMap();
-            Map<String, Boolean> extensionsAllow = filtersDialog.getExtensionsAllowMap();
-            Map<String, Boolean> extensionsDeny = filtersDialog.getExtensionsDenyMap();
-            Map<String, Boolean> contentInclude = filtersDialog.getContentIncludesMap();
-            Map<String, Boolean> contentExclude = filtersDialog.getContentExcludesMap();
-            Map<String, Boolean> contentIncludeCase = filtersDialog.getContentIncludesCaseMap();
-            Map<String, Boolean> contentExcludeCase = filtersDialog.getContentExcludesCaseMap();
-
-            knownIncludes.clear();
-            knownIncludes.putAll(include);
-            knownExcludes.clear();
-            knownExcludes.putAll(exclude);
-            knownIncludesCase.clear();
-            knownIncludesCase.putAll(incCase);
-            knownExcludesCase.clear();
-            knownExcludesCase.putAll(excCase);
-
-            knownContentIncludes.clear();
-            knownContentIncludes.putAll(contentInclude);
-            knownContentExcludes.clear();
-            knownContentExcludes.putAll(contentExclude);
-            knownContentIncludesCase.clear();
-            knownContentIncludesCase.putAll(contentIncludeCase);
-            knownContentExcludesCase.clear();
-            knownContentExcludesCase.putAll(contentExcludeCase);
-
-            knownExtensionsAllow.clear();
-            knownExtensionsAllow.putAll(extensionsAllow);
-            knownExtensionsDeny.clear();
-            knownExtensionsDeny.putAll(extensionsDeny);
-
-            // Zeitfilter übernehmen: alle Einträge (inkl. deaktivierter) übernehmen, damit sie persistiert werden können
-            knownTimeIncludes.clear();
-            knownTimeIncludes.addAll(filtersDialog.getTimeIncludes());
-            knownTimeExcludes.clear();
-            knownTimeExcludes.addAll(filtersDialog.getTimeExcludes());
-            knownTimeIncludesAllMode = filtersDialog.isTimeIncludeAllMode();
-
-            knownIncludesAllMode = filtersDialog.isIncludeAllMode();
-            knownContentIncludesAllMode = filtersDialog.isContentIncludeAllMode();
-            // timeIncludeAllMode ist oben schon gesetzt
-
-            saveExtensionsToSettings();
+            updateFiltersFromDialog(filtersDialog);
+            saveApplicationSettings();
         }
     }
 
-    /**
-     * Aktualisiert den Zustand des Ordnerfeldes und der Drive-Auswahl abhängig vom Suchstatus.
-     */
-    void updateFolderFieldState() {
-        if (running) {
-            topPanel.getFolderField().setEnabled(false);
-            topPanel.getBrowseButton().setEnabled(false);
+    private void updateFiltersFromDialog(final FiltersDialog filtersDialog) {
+        filenameIncludeFilters.clear();
+        filenameIncludeFilters.putAll(filtersDialog.getIncludesMap());
+        filenameExcludeFilters.clear();
+        filenameExcludeFilters.putAll(filtersDialog.getExcludesMap());
+        filenameIncludeCaseMap.clear();
+        filenameIncludeCaseMap.putAll(filtersDialog.getIncludesCaseMap());
+        filenameExcludeCaseMap.clear();
+        filenameExcludeCaseMap.putAll(filtersDialog.getExcludesCaseMap());
+
+        contentIncludeFilters.clear();
+        contentIncludeFilters.putAll(filtersDialog.getContentIncludesMap());
+        contentExcludeFilters.clear();
+        contentExcludeFilters.putAll(filtersDialog.getContentExcludesMap());
+        contentIncludeCaseMap.clear();
+        contentIncludeCaseMap.putAll(filtersDialog.getContentIncludesCaseMap());
+        contentExcludeCaseMap.clear();
+        contentExcludeCaseMap.putAll(filtersDialog.getContentExcludesCaseMap());
+
+        allowedFileExtensions.clear();
+        allowedFileExtensions.putAll(filtersDialog.getExtensionsAllowMap());
+        deniedFileExtensions.clear();
+        deniedFileExtensions.putAll(filtersDialog.getExtensionsDenyMap());
+
+        timeIncludeRanges.clear();
+        timeIncludeRanges.addAll(filtersDialog.getTimeIncludes());
+        timeExcludeRanges.clear();
+        timeExcludeRanges.addAll(filtersDialog.getTimeExcludes());
+        timeIncludeAllMode = filtersDialog.isTimeIncludeAllMode();
+
+        filenameIncludeAllMode = filtersDialog.isIncludeAllMode();
+        contentIncludeAllMode = filtersDialog.isContentIncludeAllMode();
+    }
+
+    public void updateFolderFieldState() {
+        if (isSearchRunning) {
+            topPanel.getFolderPathTextField().setEnabled(false);
+            topPanel.getBrowseFolderButton().setEnabled(false);
             drivePanel.setDrivesEnabled(false);
             return;
         }
 
         final boolean anyDriveSelected = !drivePanel.getSelectedDrives().isEmpty();
-        topPanel.getFolderField().setEnabled(!anyDriveSelected);
-        topPanel.getBrowseButton().setEnabled(!anyDriveSelected);
+        topPanel.getFolderPathTextField().setEnabled(!anyDriveSelected);
+        topPanel.getBrowseFolderButton().setEnabled(!anyDriveSelected);
         drivePanel.setDrivesEnabled(true);
     }
 
-    void updateButtons(final boolean running) {
-        this.running = running;
-        topPanel.getSearchButton().setEnabled(!running);
-        topPanel.getCancelButton().setEnabled(running);
-        topPanel.getQueryField().setEnabled(!running);
-        topPanel.getCaseSensitiveCheck().setEnabled(!running);
-        topPanel.getManageFiltersButton().setEnabled(!running);
-        bottomPanel.getPerformanceModeCheck().setEnabled(!running);
-        bottomPanel.getSettingsButton().setEnabled(!running);
-        drivePanel.setDrivesEnabled(!running);
+    void updateButtonStates(final boolean isRunning) {
+        this.isSearchRunning = isRunning;
+        topPanel.getSearchButton().setEnabled(!isRunning);
+        topPanel.getCancelSearchButton().setEnabled(isRunning);
+        topPanel.getSearchQueryTextField().setEnabled(!isRunning);
+        topPanel.getCaseSensitiveCheckbox().setEnabled(!isRunning);
+        topPanel.getManageFiltersButton().setEnabled(!isRunning);
+        bottomPanel.getPerformanceModeCheckbox().setEnabled(!isRunning);
+        bottomPanel.getShowSettingsButton().setEnabled(!isRunning);
+        drivePanel.setDrivesEnabled(!isRunning);
         updateFolderFieldState();
     }
 
-    /**
-     * Bindet das Model an den StatusUpdater.
-     */
-    private void bindModel() {
-        model.addPropertyChangeListener(statusUpdater::onModelChange);
-    }
-
-    /**
-     * Speichert die aktuellen Filter- und Sucheinstellungen in einer Properties-Datei.
-     */
     public void saveSettings() {
-        saveExtensionsToSettings();
+        saveApplicationSettings();
     }
 
-    private void saveExtensionsToSettings() {
+    private void saveApplicationSettings() {
         try {
-            final Properties properties = new Properties();
+            final Properties settingsProperties = new Properties();
 
-            properties.put("includes", mapToString(knownIncludes));
-            properties.put("excludes", mapToString(knownExcludes));
-            properties.put("includesCase", mapToString(knownIncludesCase));
-            properties.put("excludesCase", mapToString(knownExcludesCase));
-            properties.put("extensionsAllow", mapToString(knownExtensionsAllow));
-            properties.put("extensionsDeny", mapToString(knownExtensionsDeny));
-            properties.put("contentIncludes", mapToString(knownContentIncludes));
-            properties.put("contentExcludes", mapToString(knownContentExcludes));
-            properties.put("contentIncludesCase", mapToString(knownContentIncludesCase));
-            properties.put("contentExcludesCase", mapToString(knownContentExcludesCase));
-            // Zeitfilter speichern (enabled|startMillis|endMillis|MODE;...)
-            properties.put("timeIncludes", timeListToString(knownTimeIncludes));
-            properties.put("timeExcludes", timeListToString(knownTimeExcludes));
-            properties.put("timeIncludesMode", knownTimeIncludesAllMode ? "ALL" : "ANY");
+            settingsProperties.setProperty(PROPERTY_START_FOLDER,
+                    getSafeText(topPanel.getFolderPathTextField().getText()));
+            settingsProperties.setProperty(PROPERTY_QUERY,
+                    getSafeText(topPanel.getSearchQueryTextField().getText()));
+            settingsProperties.setProperty(PROPERTY_CASE_SENSITIVE,
+                    Boolean.toString(topPanel.getCaseSensitiveCheckbox().isSelected()));
+            settingsProperties.setProperty(PROPERTY_DRIVES,
+                    String.join(",", drivePanel.getSelectedDrives()));
 
-            properties.put("startFolder", topPanel.getFolderField().getText() == null ? "" : topPanel.getFolderField().getText());
-            properties.put("query", topPanel.getQueryField().getText() == null ? "" : topPanel.getQueryField().getText());
-            properties.put("caseSensitive", Boolean.toString(topPanel.getCaseSensitiveCheck().isSelected()));
-            properties.put("drives", String.join(",", drivePanel.getSelectedDrives()));
-            properties.put("includesMode", knownIncludesAllMode ? "ALL" : "ANY");
-            properties.put("contentIncludesMode", knownContentIncludesAllMode ? "ALL" : "ANY");
-            properties.put("useAllCores", Boolean.toString(useAllCores));
-            properties.put("extractionMode", extractionMode == null ? "POI_THEN_TIKA" : extractionMode.name());
+            saveFilterMapsToProperties(settingsProperties);
+            saveTimeFiltersToProperties(settingsProperties);
+            saveModeSettingsToProperties(settingsProperties);
 
-            final File file = settingsFile.toFile();
-            try (final FileOutputStream fileOutputStream = new FileOutputStream(file)) {
-                properties.store(fileOutputStream, "SearchMax Filter Settings");
+            final File settingsFile = settingsFilePath.toFile();
+            try (final FileOutputStream outputStream = new FileOutputStream(settingsFile)) {
+                settingsProperties.store(outputStream, "SearchMax Filter Settings");
             }
         } catch (final Exception exception) {
             log.warn("Fehler beim Speichern der Filtereinstellungen", exception);
         }
     }
 
-    /**
-     * Wandelt eine Map in einen String um, der für die Speicherung in Properties geeignet ist.
-     *
-     * @param map Die zu konvertierende Map
-     * @return String-Repräsentation der Map
-     */
-    private String mapToString(final Map<String, Boolean> map) {
+    private String getSafeText(final String text) {
+        return text == null ? "" : text;
+    }
+
+    private void saveFilterMapsToProperties(final Properties properties) {
+        properties.setProperty(PROPERTY_INCLUDES, convertMapToString(filenameIncludeFilters));
+        properties.setProperty(PROPERTY_EXCLUDES, convertMapToString(filenameExcludeFilters));
+        properties.setProperty(PROPERTY_INCLUDES_CASE, convertMapToString(filenameIncludeCaseMap));
+        properties.setProperty(PROPERTY_EXCLUDES_CASE, convertMapToString(filenameExcludeCaseMap));
+        properties.setProperty(PROPERTY_EXTENSIONS_ALLOW, convertMapToString(allowedFileExtensions));
+        properties.setProperty(PROPERTY_EXTENSIONS_DENY, convertMapToString(deniedFileExtensions));
+        properties.setProperty(PROPERTY_CONTENT_INCLUDES, convertMapToString(contentIncludeFilters));
+        properties.setProperty(PROPERTY_CONTENT_EXCLUDES, convertMapToString(contentExcludeFilters));
+        properties.setProperty(PROPERTY_CONTENT_INCLUDES_CASE, convertMapToString(contentIncludeCaseMap));
+        properties.setProperty(PROPERTY_CONTENT_EXCLUDES_CASE, convertMapToString(contentExcludeCaseMap));
+    }
+
+    private void saveTimeFiltersToProperties(final Properties properties) {
+        properties.setProperty(PROPERTY_TIME_INCLUDES, convertTimeListToString(timeIncludeRanges));
+        properties.setProperty(PROPERTY_TIME_EXCLUDES, convertTimeListToString(timeExcludeRanges));
+    }
+
+    private void saveModeSettingsToProperties(final Properties properties) {
+        properties.setProperty(PROPERTY_TIME_INCLUDES_MODE, timeIncludeAllMode ? "ALL" : "ANY");
+        properties.setProperty(PROPERTY_INCLUDES_MODE, filenameIncludeAllMode ? "ALL" : "ANY");
+        properties.setProperty(PROPERTY_CONTENT_INCLUDES_MODE, contentIncludeAllMode ? "ALL" : "ANY");
+        properties.setProperty(PROPERTY_USE_ALL_CORES, Boolean.toString(useAllCores));
+        properties.setProperty(PROPERTY_EXTRACTION_MODE,
+                extractionMode == null ? "POI_THEN_TIKA" : extractionMode.name());
+    }
+
+    private String convertMapToString(final Map<String, Boolean> map) {
         final StringBuilder stringBuilder = new StringBuilder();
         for (final Map.Entry<String, Boolean> entry : map.entrySet()) {
-            stringBuilder.append(entry.getKey()).append("=").append(entry.getValue()).append(";");
+            stringBuilder.append(entry.getKey())
+                    .append("=")
+                    .append(entry.getValue())
+                    .append(";");
         }
-
         return stringBuilder.toString();
     }
 
-    /**
-     * Speichert eine Liste von TimeRangeTableModel.Entry in einen String zur Speicherung in Properties.
-     *
-     * @param list Die zu speichernde Liste
-     * @return String-Repräsentation der Liste
-     */
-    private String timeListToString(final List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> list) {
+    private String convertTimeListToString(final List<TimeRangeTableModel.Entry> entries) {
         final StringBuilder stringBuilder = new StringBuilder();
-        for (final com.mlprograms.searchmax.model.TimeRangeTableModel.Entry entry : list) {
-            long start = entry.start == null ? -1L : entry.start.getTime();
-            long end = entry.end == null ? -1L : entry.end.getTime();
-            String mode = entry.mode == null ? com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.DATETIME.name() : entry.mode.name();
-            stringBuilder.append(entry.enabled).append("|").append(start).append("|").append(end).append("|").append(mode).append(";");
-        }
+        for (final TimeRangeTableModel.Entry entry : entries) {
+            final long startMillis = entry.start == null ? -1L : entry.start.getTime();
+            final long endMillis = entry.end == null ? -1L : entry.end.getTime();
+            final String mode = entry.mode == null ?
+                    TimeRangeTableModel.Mode.DATETIME.name() : entry.mode.name();
 
+            stringBuilder.append(entry.enabled)
+                    .append("|")
+                    .append(startMillis)
+                    .append("|")
+                    .append(endMillis)
+                    .append("|")
+                    .append(mode)
+                    .append(";");
+        }
         return stringBuilder.toString();
     }
 
-    /**
-     * Lädt die gespeicherten Einstellungen aus der Properties-Datei und übernimmt sie in die UI und Filter-Maps.
-     */
-    private void loadSettings() {
+    private void loadApplicationSettings() {
         try {
-            final File file = settingsFile.toFile();
-            if (!file.exists()) {
+            final File settingsFile = settingsFilePath.toFile();
+            if (!settingsFile.exists()) {
                 return;
             }
 
-            final Properties properties = new Properties();
-            try (final FileInputStream fileInputStream = new FileInputStream(file)) {
-                properties.load(fileInputStream);
+            final Properties settingsProperties = new Properties();
+            try (final FileInputStream inputStream = new FileInputStream(settingsFile)) {
+                settingsProperties.load(inputStream);
             }
 
-            final String startFolder = properties.getProperty("startFolder", "").trim();
-            if (!startFolder.isEmpty()) {
-                topPanel.getFolderField().setText(startFolder);
-            }
+            loadBasicSettings(settingsProperties);
+            loadFilterSettings(settingsProperties);
+            loadTimeFilterSettings(settingsProperties);
+            loadModeSettings(settingsProperties);
+            loadPerformanceSettings(settingsProperties);
 
-            final String query = properties.getProperty("query", "").trim();
-            if (!query.isEmpty()) {
-                topPanel.getQueryField().setText(query);
-            }
-
-            final String caseString = properties.getProperty("caseSensitive", "false").trim();
-            topPanel.getCaseSensitiveCheck().setSelected("true".equalsIgnoreCase(caseString));
-
-            final String drives = properties.getProperty("drives", "").trim();
-            if (!drives.isEmpty()) {
-                String[] parts = drives.split(",");
-                List<String> driveList = new java.util.ArrayList<>();
-
-                for (String part : parts) {
-                    String trimmedPart = part.trim();
-                    if (!trimmedPart.isEmpty()) {
-                        driveList.add(trimmedPart);
-                    }
-                }
-
-                drivePanel.setSelectedDrives(driveList);
-            }
-
-            final String includes = properties.getProperty("includes", "").trim();
-            parseFilterString(includes, knownIncludes);
-
-            final String excludes = properties.getProperty("excludes", "").trim();
-            parseFilterString(excludes, knownExcludes);
-
-            final String includeCase = properties.getProperty("includesCase", "").trim();
-            if (!includeCase.isEmpty()) {
-                final Map<String, Boolean> booleanMap = stringToMapBoolean(includeCase);
-                knownIncludesCase.clear();
-                knownIncludesCase.putAll(booleanMap);
-            }
-
-            final String excludeCase = properties.getProperty("excludesCase", "").trim();
-            if (!excludeCase.isEmpty()) {
-                final Map<String, Boolean> booleanMap = stringToMapBoolean(excludeCase);
-                knownExcludesCase.clear();
-                knownExcludesCase.putAll(booleanMap);
-            }
-
-            final String allow = properties.getProperty("extensionsAllow", "").trim();
-            parseFilterString(allow, knownExtensionsAllow);
-            final String deny = properties.getProperty("extensionsDeny", "").trim();
-            parseFilterString(deny, knownExtensionsDeny);
-            // Allow and Deny lists are independent — keep both as stored
-
-            final String contentIncludes = properties.getProperty("contentIncludes", "").trim();
-            parseFilterString(contentIncludes, knownContentIncludes);
-            final String contentExcludes = properties.getProperty("contentExcludes", "").trim();
-            parseFilterString(contentExcludes, knownContentExcludes);
-
-            final String contentIncludeCase = properties.getProperty("contentIncludesCase", "").trim();
-            if (!contentIncludeCase.isEmpty()) {
-                final Map<String, Boolean> booleanMap = stringToMapBoolean(contentIncludeCase);
-                knownContentIncludesCase.clear();
-                knownContentIncludesCase.putAll(booleanMap);
-            }
-
-            final String contentExcludeCase = properties.getProperty("contentExcludesCase", "").trim();
-            if (!contentExcludeCase.isEmpty()) {
-                final Map<String, Boolean> booleanMap = stringToMapBoolean(contentExcludeCase);
-                knownContentExcludesCase.clear();
-                knownContentExcludesCase.putAll(booleanMap);
-            }
-
-            final String timeIncludes = properties.getProperty("timeIncludes", "").trim();
-            parseTimeListString(timeIncludes, knownTimeIncludes);
-            final String timeExcludes = properties.getProperty("timeExcludes", "").trim();
-            parseTimeListString(timeExcludes, knownTimeExcludes);
-
-            String timeMode = properties.getProperty("timeIncludesMode", "ANY").trim();
-            knownTimeIncludesAllMode = "ALL".equalsIgnoreCase(timeMode);
-
-            String mode = properties.getProperty("includesMode", "ANY").trim();
-            knownIncludesAllMode = "ALL".equalsIgnoreCase(mode);
-
-            String contentMode = properties.getProperty("contentIncludesMode", "ANY").trim();
-            knownContentIncludesAllMode = "ALL".equalsIgnoreCase(contentMode);
-
-            String useAll = properties.getProperty("useAllCores", "false").trim();
-            useAllCores = "true".equalsIgnoreCase(useAll);
-            bottomPanel.getPerformanceModeCheck().setSelected(useAllCores);
-            controller.setUseAllCores(useAllCores);
-
-            String extractionModeString = properties.getProperty("extractionMode", "POI_THEN_TIKA").trim();
-            extractionMode = com.mlprograms.searchmax.ExtractionMode.valueOf(extractionModeString);
-            controller.setExtractionMode(extractionMode);
         } catch (final Exception exception) {
             log.warn("Fehler beim Laden der Filtereinstellungen", exception);
         }
     }
 
-    /**
-     * Parst einen Filter-String und überträgt die Werte in die Ziel-Map.
-     *
-     * @param filterString Der zu parsende String
-     * @param targetMap    Die Ziel-Map
-     */
-    private void parseFilterString(final String filterString, final Map<String, Boolean> targetMap) {
+    private void loadBasicSettings(final Properties properties) {
+        final String startFolder = properties.getProperty(PROPERTY_START_FOLDER, "").trim();
+        if (!startFolder.isEmpty()) {
+            topPanel.getFolderPathTextField().setText(startFolder);
+        }
+
+        final String query = properties.getProperty(PROPERTY_QUERY, "").trim();
+        if (!query.isEmpty()) {
+            topPanel.getSearchQueryTextField().setText(query);
+        }
+
+        final String caseSensitive = properties.getProperty(PROPERTY_CASE_SENSITIVE, "false").trim();
+        topPanel.getCaseSensitiveCheckbox().setSelected("true".equalsIgnoreCase(caseSensitive));
+
+        final String drives = properties.getProperty(PROPERTY_DRIVES, "").trim();
+        if (!drives.isEmpty()) {
+            final String[] driveParts = drives.split(",");
+            final List<String> selectedDrives = new ArrayList<>();
+            for (final String drivePart : driveParts) {
+                final String trimmedDrive = drivePart.trim();
+                if (!trimmedDrive.isEmpty()) {
+                    selectedDrives.add(trimmedDrive);
+                }
+            }
+            drivePanel.setSelectedDrives(selectedDrives);
+        }
+    }
+
+    private void loadFilterSettings(final Properties properties) {
+        loadFilterMap(properties.getProperty(PROPERTY_INCLUDES, "").trim(), filenameIncludeFilters);
+        loadFilterMap(properties.getProperty(PROPERTY_EXCLUDES, "").trim(), filenameExcludeFilters);
+        loadFilterMap(properties.getProperty(PROPERTY_INCLUDES_CASE, "").trim(), filenameIncludeCaseMap);
+        loadFilterMap(properties.getProperty(PROPERTY_EXCLUDES_CASE, "").trim(), filenameExcludeCaseMap);
+        loadFilterMap(properties.getProperty(PROPERTY_EXTENSIONS_ALLOW, "").trim(), allowedFileExtensions);
+        loadFilterMap(properties.getProperty(PROPERTY_EXTENSIONS_DENY, "").trim(), deniedFileExtensions);
+        loadFilterMap(properties.getProperty(PROPERTY_CONTENT_INCLUDES, "").trim(), contentIncludeFilters);
+        loadFilterMap(properties.getProperty(PROPERTY_CONTENT_EXCLUDES, "").trim(), contentExcludeFilters);
+        loadFilterMap(properties.getProperty(PROPERTY_CONTENT_INCLUDES_CASE, "").trim(), contentIncludeCaseMap);
+        loadFilterMap(properties.getProperty(PROPERTY_CONTENT_EXCLUDES_CASE, "").trim(), contentExcludeCaseMap);
+    }
+
+    private void loadTimeFilterSettings(final Properties properties) {
+        loadTimeFilterList(properties.getProperty(PROPERTY_TIME_INCLUDES, "").trim(), timeIncludeRanges);
+        loadTimeFilterList(properties.getProperty(PROPERTY_TIME_EXCLUDES, "").trim(), timeExcludeRanges);
+    }
+
+    private void loadModeSettings(final Properties properties) {
+        final String timeMode = properties.getProperty(PROPERTY_TIME_INCLUDES_MODE, "ANY").trim();
+        timeIncludeAllMode = "ALL".equalsIgnoreCase(timeMode);
+
+        final String includesMode = properties.getProperty(PROPERTY_INCLUDES_MODE, "ANY").trim();
+        filenameIncludeAllMode = "ALL".equalsIgnoreCase(includesMode);
+
+        final String contentMode = properties.getProperty(PROPERTY_CONTENT_INCLUDES_MODE, "ANY").trim();
+        contentIncludeAllMode = "ALL".equalsIgnoreCase(contentMode);
+    }
+
+    private void loadPerformanceSettings(final Properties properties) {
+        final String useAllCoresValue = properties.getProperty(PROPERTY_USE_ALL_CORES, "false").trim();
+        useAllCores = "true".equalsIgnoreCase(useAllCoresValue);
+        bottomPanel.getPerformanceModeCheckbox().setSelected(useAllCores);
+        searchController.setUseAllCores(useAllCores);
+
+        final String extractionModeString = properties.getProperty(PROPERTY_EXTRACTION_MODE, "POI_THEN_TIKA").trim();
+        extractionMode = ExtractionMode.valueOf(extractionModeString);
+        searchController.setExtractionMode(extractionMode);
+    }
+
+    private void loadFilterMap(final String filterString, final Map<String, Boolean> targetMap) {
         if (!filterString.isEmpty()) {
             if (filterString.contains("=") || filterString.contains(";")) {
-                final Map<String, Boolean> booleanMap = stringToMapBoolean(filterString);
+                final Map<String, Boolean> parsedMap = parseStringToBooleanMap(filterString);
                 targetMap.clear();
-                targetMap.putAll(booleanMap);
+                targetMap.putAll(parsedMap);
             } else {
-                final String[] parts = filterString.split(",");
-                for (String part : parts) {
-                    String trimmedPart = part.trim();
-                    if (!trimmedPart.isEmpty()) {
-                        targetMap.put(trimmedPart, true);
+                final String[] filterParts = filterString.split(",");
+                for (final String filterPart : filterParts) {
+                    final String trimmedFilter = filterPart.trim();
+                    if (!trimmedFilter.isEmpty()) {
+                        targetMap.put(trimmedFilter, true);
                     }
                 }
             }
         }
     }
 
-    /**
-     * Wandelt einen String im Format "key=value;..." in eine Map um.
-     *
-     * @param string Der zu parsende String
-     * @return Die erzeugte Map
-     */
-    private Map<String, Boolean> stringToMapBoolean(final String string) {
-        final Map<String, Boolean> linkedHashMap = new LinkedHashMap<>();
-        final String[] parts = string.split(";");
-        for (final String part : parts) {
-            String trimmedPart = part.trim();
-            if (trimmedPart.isEmpty()) {
+    private Map<String, Boolean> parseStringToBooleanMap(final String inputString) {
+        final Map<String, Boolean> resultMap = new LinkedHashMap<>();
+        final String[] keyValuePairs = inputString.split(";");
+
+        for (final String keyValuePair : keyValuePairs) {
+            final String trimmedPair = keyValuePair.trim();
+            if (trimmedPair.isEmpty()) {
                 continue;
             }
 
-            int index = trimmedPart.indexOf('=');
-            if (index <= 0) {
+            final int separatorIndex = trimmedPair.indexOf('=');
+            if (separatorIndex <= 0) {
                 continue;
             }
 
-            String key = trimmedPart.substring(0, index);
-            String value = trimmedPart.substring(index + 1);
-            linkedHashMap.put(key, Boolean.TRUE.toString().equalsIgnoreCase(value) || "true".equalsIgnoreCase(value));
+            final String key = trimmedPair.substring(0, separatorIndex);
+            final String value = trimmedPair.substring(separatorIndex + 1);
+            resultMap.put(key, Boolean.TRUE.toString().equalsIgnoreCase(value) || "true".equalsIgnoreCase(value));
         }
 
-        return linkedHashMap;
+        return resultMap;
     }
 
-    /**
-     * Parst einen String und überträgt die Werte in die Ziel-Liste für Zeitfilter.
-     *
-     * @param timeString Der zu parsende String
-     * @param targetList Die Ziel-Liste
-     */
-    private void parseTimeListString(final String timeString, final List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> targetList) {
+    private void loadTimeFilterList(final String timeString, final List<TimeRangeTableModel.Entry> targetList) {
         targetList.clear();
         if (!timeString.isEmpty()) {
-            final String[] parts = timeString.split(";");
-            for (String part : parts) {
-                String trimmedPart = part.trim();
-                if (trimmedPart.isEmpty()) {
+            final String[] timeEntries = timeString.split(";");
+            for (final String timeEntry : timeEntries) {
+                final String trimmedEntry = timeEntry.trim();
+                if (trimmedEntry.isEmpty()) {
                     continue;
                 }
 
-                String[] values = trimmedPart.split("\\|");
-                if (values.length >= 3) {
+                final String[] entryValues = trimmedEntry.split("\\|");
+                if (entryValues.length >= 3) {
                     try {
-                        boolean enabled = Boolean.parseBoolean(values[0]);
-                        long startMillis = Long.parseLong(values[1]);
-                        long endMillis = Long.parseLong(values[2]);
-                        com.mlprograms.searchmax.model.TimeRangeTableModel.Mode mode = com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.DATETIME;
-                        if (values.length >= 4 && values[3] != null && !values[3].isEmpty()) {
+                        final boolean enabled = Boolean.parseBoolean(entryValues[0]);
+                        final long startMillis = Long.parseLong(entryValues[1]);
+                        final long endMillis = Long.parseLong(entryValues[2]);
+                        TimeRangeTableModel.Mode mode =
+                                TimeRangeTableModel.Mode.DATETIME;
+
+                        if (entryValues.length >= 4 && entryValues[3] != null && !entryValues[3].isEmpty()) {
                             try {
-                                mode = com.mlprograms.searchmax.model.TimeRangeTableModel.Mode.valueOf(values[3]);
-                            } catch (IllegalArgumentException iae) {
-                                // keep default
+                                mode = TimeRangeTableModel.Mode.valueOf(entryValues[3]);
+                            } catch (final IllegalArgumentException illegalArgumentException) {
+                                // Behalte Standardmodus
                             }
                         }
 
-                        Date startDate = startMillis < 0 ? null : new Date(startMillis);
-                        Date endDate = endMillis < 0 ? null : new Date(endMillis);
-                        targetList.add(new com.mlprograms.searchmax.model.TimeRangeTableModel.Entry(enabled, startDate, endDate, mode));
-                    } catch (NumberFormatException e) {
-                        log.warn("Fehler beim Parsen des Zeitfilter-Eintrags: " + trimmedPart, e);
+                        final Date startDate = startMillis < 0 ? null : new Date(startMillis);
+                        final Date endDate = endMillis < 0 ? null : new Date(endMillis);
+                        targetList.add(new TimeRangeTableModel.Entry(
+                                enabled, startDate, endDate, mode));
+                    } catch (final NumberFormatException numberFormatException) {
+                        log.warn("Fehler beim Parsen des Zeitfilter-Eintrags: " + trimmedEntry, numberFormatException);
                     }
                 }
             }
         }
     }
 
-    /**
-     * Prüft, ob mindestens ein aktiver Zeitfilter (enabled==true) in der Liste enthalten ist.
-     */
-    private boolean hasActiveTimeFilter(List<com.mlprograms.searchmax.model.TimeRangeTableModel.Entry> list) {
-        if (list == null || list.isEmpty()) return false;
-        for (com.mlprograms.searchmax.model.TimeRangeTableModel.Entry entry : list) {
-            if (entry != null && entry.enabled) return true;
+    private boolean hasActiveTimeFilter(final List<TimeRangeTableModel.Entry> timeEntries) {
+        if (timeEntries == null || timeEntries.isEmpty()) {
+            return false;
+        }
+
+        for (final TimeRangeTableModel.Entry entry : timeEntries) {
+            if (entry != null && entry.enabled) {
+                return true;
+            }
         }
         return false;
     }

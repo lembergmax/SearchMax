@@ -1,94 +1,152 @@
 package com.mlprograms.searchmax.view;
 
 import com.mlprograms.searchmax.ExtractionMode;
+import lombok.Getter;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
 
-public class ExtractionSettingsDialog extends JDialog {
+@Getter
+public final class ExtractionSettingsDialog extends JDialog {
 
-    private ExtractionMode selected = null;
-    private final JPanel sectionsPanel = new JPanel();
+    private static final int DIALOG_WIDTH = 480;
+    private static final int DIALOG_HEIGHT = 320;
+    private static final int VERTICAL_STRUT_SIZE = 4;
+    private static final int SECTION_SPACING = 8;
+    private static final int LAYOUT_GAP = 8;
 
-    public ExtractionSettingsDialog(Window owner, ExtractionMode current) {
+    private ExtractionMode selectedExtractionMode = null;
+    private final JPanel sectionsContainerPanel = new JPanel();
+    private final ButtonGroup extractionModeButtonGroup = new ButtonGroup();
+
+    public ExtractionSettingsDialog(final Window owner, final ExtractionMode currentExtractionMode) {
         super(owner, GuiConstants.TITLE_EXTRACTION_SETTINGS, ModalityType.APPLICATION_MODAL);
-        initUI(current);
+        initializeUserInterface(currentExtractionMode);
     }
 
-    private void initUI(ExtractionMode current) {
-        // Root panel uses BorderLayout
-        JPanel root = new JPanel(new BorderLayout(8, 8));
-        sectionsPanel.setLayout(new BoxLayout(sectionsPanel, BoxLayout.Y_AXIS));
+    private void initializeUserInterface(final ExtractionMode currentExtractionMode) {
+        final JPanel rootPanel = createRootPanel();
+        initializeSectionsContainer();
 
-        // --- Extraction section ---
-        JPanel extractionPanel = new JPanel();
+        final JPanel extractionSettingsPanel = createExtractionSettingsPanel(currentExtractionMode);
+        addSectionComponent(extractionSettingsPanel);
+
+        rootPanel.add(new JScrollPane(sectionsContainerPanel), BorderLayout.CENTER);
+        rootPanel.add(createButtonPanel(), BorderLayout.SOUTH);
+
+        setContentPane(rootPanel);
+        configureDialogSettings();
+    }
+
+    private JPanel createRootPanel() {
+        final JPanel panel = new JPanel(new BorderLayout(LAYOUT_GAP, LAYOUT_GAP));
+        panel.setBorder(BorderFactory.createEmptyBorder(LAYOUT_GAP, LAYOUT_GAP, LAYOUT_GAP, LAYOUT_GAP));
+        return panel;
+    }
+
+    private void initializeSectionsContainer() {
+        sectionsContainerPanel.setLayout(new BoxLayout(sectionsContainerPanel, BoxLayout.Y_AXIS));
+    }
+
+    private JPanel createExtractionSettingsPanel(final ExtractionMode currentExtractionMode) {
+        final JPanel extractionPanel = new JPanel();
         extractionPanel.setLayout(new BoxLayout(extractionPanel, BoxLayout.Y_AXIS));
-        extractionPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), GuiConstants.SECTION_EXTRACTION, TitledBorder.LEFT, TitledBorder.TOP));
+        extractionPanel.setBorder(createTitledBorder(GuiConstants.SECTION_EXTRACTION));
 
-        JRadioButton poiOnly = new JRadioButton(GuiConstants.RADIO_POI_ONLY);
-        JRadioButton tikaOnly = new JRadioButton(GuiConstants.RADIO_TIKA_ONLY);
-        JRadioButton poiThenTika = new JRadioButton(GuiConstants.RADIO_POI_THEN_TIKA);
+        final JRadioButton poiOnlyRadioButton = createRadioButton(GuiConstants.RADIO_POI_ONLY, ExtractionMode.POI_ONLY);
+        final JRadioButton tikaOnlyRadioButton = createRadioButton(GuiConstants.RADIO_TIKA_ONLY, ExtractionMode.TIKA_ONLY);
+        final JRadioButton poiThenTikaRadioButton = createRadioButton(GuiConstants.RADIO_POI_THEN_TIKA, ExtractionMode.POI_THEN_TIKA);
 
-        ButtonGroup group = new ButtonGroup();
-        group.add(poiOnly);
-        group.add(tikaOnly);
-        group.add(poiThenTika);
+        addRadioButtonsToGroup(poiOnlyRadioButton, tikaOnlyRadioButton, poiThenTikaRadioButton);
+        addRadioButtonsToPanel(extractionPanel, poiThenTikaRadioButton, poiOnlyRadioButton, tikaOnlyRadioButton);
+        setInitialSelection(currentExtractionMode, poiOnlyRadioButton, tikaOnlyRadioButton, poiThenTikaRadioButton);
 
-        extractionPanel.add(poiThenTika);
-        extractionPanel.add(Box.createVerticalStrut(4));
-        extractionPanel.add(poiOnly);
-        extractionPanel.add(Box.createVerticalStrut(4));
-        extractionPanel.add(tikaOnly);
+        return extractionPanel;
+    }
 
-        switch (current) {
-            case POI_ONLY -> poiOnly.setSelected(true);
-            case TIKA_ONLY -> tikaOnly.setSelected(true);
-            case POI_THEN_TIKA -> poiThenTika.setSelected(true);
-            default -> poiThenTika.setSelected(true);
+    private TitledBorder createTitledBorder(final String title) {
+        return BorderFactory.createTitledBorder(
+                BorderFactory.createEtchedBorder(),
+                title,
+                TitledBorder.LEFT,
+                TitledBorder.TOP
+        );
+    }
+
+    private JRadioButton createRadioButton(final String text, final ExtractionMode extractionMode) {
+        final JRadioButton radioButton = new JRadioButton(text);
+        radioButton.setActionCommand(extractionMode.name());
+        return radioButton;
+    }
+
+    private void addRadioButtonsToGroup(final JRadioButton... radioButtons) {
+        for (final JRadioButton radioButton : radioButtons) {
+            extractionModeButtonGroup.add(radioButton);
         }
+    }
 
-        addSectionComponent(extractionPanel);
+    private void addRadioButtonsToPanel(final JPanel panel, final JRadioButton... radioButtons) {
+        for (int i = 0; i < radioButtons.length; i++) {
+            panel.add(radioButtons[i]);
+            if (i < radioButtons.length - 1) {
+                panel.add(Box.createVerticalStrut(VERTICAL_STRUT_SIZE));
+            }
+        }
+    }
 
-        root.add(new JScrollPane(sectionsPanel), BorderLayout.CENTER);
+    private void setInitialSelection(final ExtractionMode currentExtractionMode,
+                                     final JRadioButton poiOnlyRadioButton,
+                                     final JRadioButton tikaOnlyRadioButton,
+                                     final JRadioButton poiThenTikaRadioButton) {
+        switch (currentExtractionMode) {
+            case POI_ONLY -> poiOnlyRadioButton.setSelected(true);
+            case TIKA_ONLY -> tikaOnlyRadioButton.setSelected(true);
+            case POI_THEN_TIKA -> poiThenTikaRadioButton.setSelected(true);
+            default -> poiThenTikaRadioButton.setSelected(true);
+        }
+    }
 
-        // Buttons
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton ok = new JButton(GuiConstants.BUTTON_OK);
-        JButton cancel = new JButton(GuiConstants.BUTTON_CANCEL);
-        buttons.add(cancel);
-        buttons.add(ok);
-        root.add(buttons, BorderLayout.SOUTH);
+    private JPanel createButtonPanel() {
+        final JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
 
-        ok.addActionListener(e -> {
-            if (poiOnly.isSelected()) selected = ExtractionMode.POI_ONLY;
-            else if (tikaOnly.isSelected()) selected = ExtractionMode.TIKA_ONLY;
-            else selected = ExtractionMode.POI_THEN_TIKA;
+        final JButton cancelButton = new JButton(GuiConstants.BUTTON_CANCEL);
+        final JButton confirmButton = new JButton(GuiConstants.BUTTON_OK);
+
+        buttonPanel.add(cancelButton);
+        buttonPanel.add(confirmButton);
+
+        initializeButtonListeners(cancelButton, confirmButton);
+
+        return buttonPanel;
+    }
+
+    private void initializeButtonListeners(final JButton cancelButton, final JButton confirmButton) {
+        cancelButton.addActionListener(actionEvent -> {
+            selectedExtractionMode = null;
             setVisible(false);
         });
 
-        cancel.addActionListener(e -> {
-            selected = null;
+        confirmButton.addActionListener(actionEvent -> {
+            final String selectedActionCommand = extractionModeButtonGroup.getSelection().getActionCommand();
+            selectedExtractionMode = ExtractionMode.valueOf(selectedActionCommand);
             setVisible(false);
         });
+    }
 
-        setContentPane(root);
-        setPreferredSize(new Dimension(480, 320));
+    private void addSectionComponent(final JComponent component) {
+        final JPanel wrapperPanel = new JPanel(new BorderLayout());
+        wrapperPanel.add(component, BorderLayout.CENTER);
+        wrapperPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sectionsContainerPanel.add(wrapperPanel);
+        sectionsContainerPanel.add(Box.createVerticalStrut(SECTION_SPACING));
+    }
+
+    private void configureDialogSettings() {
+        setPreferredSize(new Dimension(DIALOG_WIDTH, DIALOG_HEIGHT));
         pack();
         setLocationRelativeTo(getOwner());
-    }
-
-    // Internal helper to add a full component as a section (no extra border)
-    private void addSectionComponent(JComponent comp) {
-        JPanel wrapper = new JPanel(new BorderLayout());
-        wrapper.add(comp, BorderLayout.CENTER);
-        wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
-        sectionsPanel.add(wrapper);
-        sectionsPanel.add(Box.createVerticalStrut(8));
-    }
-
-    public ExtractionMode getSelected() {
-        return selected;
+        setResizable(true);
     }
 
 }
