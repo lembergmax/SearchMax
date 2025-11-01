@@ -28,6 +28,8 @@ public final class FiltersDialog extends JDialog {
     private final TimeRangeTableModel timeExcludesModel = new TimeRangeTableModel();
 
     // Initial State
+    private final Map<String, Boolean> initialFilenameIncludes;
+    private final Map<String, Boolean> initialFilenameExcludes;
     private final Map<String, Boolean> initialExtensionsAllow;
     private final Map<String, Boolean> initialExtensionsDeny;
     private final Map<String, Boolean> initialFilenameIncludesCase;
@@ -73,6 +75,8 @@ public final class FiltersDialog extends JDialog {
         super(owner, GuiConstants.FILTERS_DIALOG_TITLE, true);
 
         // Initialize state with safe copies
+        this.initialFilenameIncludes = createSafeCopy(initialFilenameIncludes);
+        this.initialFilenameExcludes = createSafeCopy(initialFilenameExcludes);
         this.initialExtensionsAllow = createSafeCopy(initialExtensionsAllow);
         this.initialExtensionsDeny = createSafeCopy(initialExtensionsDeny);
         this.initialFilenameIncludesCase = createSafeCopy(initialFilenameIncludesCase);
@@ -101,7 +105,9 @@ public final class FiltersDialog extends JDialog {
     }
 
     private void initializeFilterData() {
-        populateTextFilters(initialContentIncludes, initialContentExcludes, filenameIncludesModel, filenameExcludesModel);
+        // Populate filename filters from the filename initial maps (bugfix: previously used content maps here)
+        populateTextFilters(initialFilenameIncludes, initialFilenameExcludes, filenameIncludesModel, filenameExcludesModel);
+        // Populate content filters from the content initial maps
         populateTextFilters(initialContentIncludes, initialContentExcludes, contentIncludesModel, contentExcludesModel);
         populateTimeFilters(initialTimeIncludes, initialTimeExcludes);
         applyCaseSensitivityFlags();
