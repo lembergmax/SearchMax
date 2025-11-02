@@ -105,9 +105,7 @@ public final class FiltersDialog extends JDialog {
     }
 
     private void initializeFilterData() {
-        // Populate filename filters from the filename initial maps (bugfix: previously used content maps here)
         populateTextFilters(initialFilenameIncludes, initialFilenameExcludes, filenameIncludesModel, filenameExcludesModel);
-        // Populate content filters from the content initial maps
         populateTextFilters(initialContentIncludes, initialContentExcludes, contentIncludesModel, contentExcludesModel);
         populateTimeFilters(initialTimeIncludes, initialTimeExcludes);
         applyCaseSensitivityFlags();
