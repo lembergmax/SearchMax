@@ -92,6 +92,17 @@ public final class GuiConstants {
     public static final String RADIO_TIKA_ONLY = "Tika only (broad support)";
     public static final String RADIO_POI_THEN_TIKA = "POI, then Tika (recommended)";
 
+    // Troubleshoot / reset settings
+    public static final String SECTION_TROUBLESHOOT = "Troubleshoot";
+    public static final String TROUBLESHOOT_INFO = "If you encounter problems with filters or settings, this action will delete the local configuration file '.searchmax.properties' in your user home and restart the application. Default settings will be loaded after restart. Use this only if you accept losing your custom settings.";
+    public static final String BUTTON_RESET_AND_RESTART = "Reset settings and restart";
+    public static final String CONFIRM_RESET_MESSAGE = "Do you really want to delete the settings and restart the application?";
+    public static final String CONFIRM_RESET_TITLE = "Reset settings";
+    public static final String MSG_SETTINGS_DELETED = "Settings deleted. The application will now restart.";
+    public static final String MSG_SETTINGS_NOT_FOUND = "Settings file not found or could not be deleted. The application will still attempt to restart.";
+    public static final String MSG_RESTART_FAILED = "Restart failed: ";
+    public static final String MSG_RESET_ERROR = "Error while resetting settings: ";
+
     // Log / Error messages
     public static final String MSG_INMEMORY_APPENDER_NOT_FOUND = "InMemory Log Appender not found. Please check the log4j2 configuration.";
     public static final String MSG_ERROR_OPEN_LOGVIEWER_PREFIX = "Error opening the log viewer: ";

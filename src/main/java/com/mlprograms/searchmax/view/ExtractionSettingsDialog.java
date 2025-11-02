@@ -6,12 +6,19 @@ import lombok.Getter;
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 public final class ExtractionSettingsDialog extends JDialog {
 
-    private static final int DIALOG_WIDTH = 480;
-    private static final int DIALOG_HEIGHT = 320;
+    private static final int DIALOG_WIDTH = 640;
+    private static final int DIALOG_HEIGHT = 420;
     private static final int VERTICAL_STRUT_SIZE = 4;
     private static final int SECTION_SPACING = 8;
     private static final int LAYOUT_GAP = 8;
@@ -31,6 +38,9 @@ public final class ExtractionSettingsDialog extends JDialog {
 
         final JPanel extractionSettingsPanel = createExtractionSettingsPanel(currentExtractionMode);
         addSectionComponent(extractionSettingsPanel);
+        // Add troubleshoot section
+        final JPanel troubleshootPanel = createTroubleshootPanel();
+        addSectionComponent(troubleshootPanel);
 
         rootPanel.add(new JScrollPane(sectionsContainerPanel), BorderLayout.CENTER);
         rootPanel.add(createButtonPanel(), BorderLayout.SOUTH);
@@ -147,6 +157,91 @@ public final class ExtractionSettingsDialog extends JDialog {
         pack();
         setLocationRelativeTo(getOwner());
         setResizable(true);
+    }
+
+    /**
+     * Creates a Troubleshoot section with explanatory text and a button to reset settings and restart the app.
+     */
+    private JPanel createTroubleshootPanel() {
+        final JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBorder(createTitledBorder(GuiConstants.SECTION_TROUBLESHOOT));
+
+        final String infoText = GuiConstants.TROUBLESHOOT_INFO;
+
+        final JTextArea infoArea = new JTextArea(infoText);
+        infoArea.setLineWrap(true);
+        infoArea.setWrapStyleWord(true);
+        infoArea.setEditable(false);
+        infoArea.setOpaque(false);
+        infoArea.setFocusable(false);
+        infoArea.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+
+        panel.add(infoArea, BorderLayout.CENTER);
+
+        final JButton resetButton = new JButton(GuiConstants.BUTTON_RESET_AND_RESTART);
+        resetButton.addActionListener(actionEvent -> {
+            final int confirm = JOptionPane.showConfirmDialog(this,
+                    GuiConstants.CONFIRM_RESET_MESSAGE,
+                    GuiConstants.CONFIRM_RESET_TITLE,
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+
+            if (confirm == JOptionPane.OK_OPTION) {
+                try {
+                    final Path settingsPath = Paths.get(System.getProperty("user.home"), ".searchmax.properties");
+                    boolean deleted = false;
+                    try {
+                        deleted = Files.deleteIfExists(settingsPath);
+                    } catch (final IOException ioe) {
+                        // swallow, will report below
+                    }
+
+                    if (deleted) {
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_SETTINGS_DELETED, GuiConstants.MSG_ERROR_TITLE, JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_SETTINGS_NOT_FOUND, GuiConstants.MSG_ERROR_TITLE, JOptionPane.INFORMATION_MESSAGE);
+                    }
+
+                    // Attempt to restart
+                    try {
+                        restartApplication();
+                    } catch (final Exception ex) {
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_RESTART_FAILED + ex.getMessage() + "\nPlease restart the application manually.", GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (final Exception ex) {
+                    JOptionPane.showMessageDialog(this, GuiConstants.MSG_RESET_ERROR + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        final JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(resetButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    /**
+     * Restart the Java application by launching a new JVM process with the same classpath and main class,
+     * then exiting the current JVM.
+     */
+    private void restartApplication() throws IOException {
+        final String javaHome = System.getProperty("java.home");
+        final String javaBin = javaHome + File.separator + "bin" + File.separator + "java";
+        final String classpath = System.getProperty("java.class.path");
+        final String mainClass = "com.mlprograms.searchmax.Main";
+
+        final List<String> command = new ArrayList<>();
+        command.add(javaBin);
+        command.add("-cp");
+        command.add(classpath);
+        command.add(mainClass);
+
+        final ProcessBuilder builder = new ProcessBuilder(command);
+        builder.inheritIO();
+        builder.start();
+
+        // Exit current JVM so the newly started process takes over
+        System.exit(0);
     }
 
 }
