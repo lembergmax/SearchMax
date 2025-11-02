@@ -17,8 +17,8 @@ import java.util.List;
 @Getter
 public final class ExtractionSettingsDialog extends JDialog {
 
-    private static final int DIALOG_WIDTH = 480;
-    private static final int DIALOG_HEIGHT = 320;
+    private static final int DIALOG_WIDTH = 640;
+    private static final int DIALOG_HEIGHT = 420;
     private static final int VERTICAL_STRUT_SIZE = 4;
     private static final int SECTION_SPACING = 8;
     private static final int LAYOUT_GAP = 8;
@@ -164,12 +164,9 @@ public final class ExtractionSettingsDialog extends JDialog {
      */
     private JPanel createTroubleshootPanel() {
         final JPanel panel = new JPanel(new BorderLayout(8, 8));
-        panel.setBorder(createTitledBorder("Probleme beheben"));
+        panel.setBorder(createTitledBorder(GuiConstants.SECTION_TROUBLESHOOT));
 
-        final String infoText = "Wenn Filter‑ oder Einstellungsprobleme auftreten, löscht dieser Vorgang die lokale " +
-                "Konfigurationsdatei '.searchmax.properties' in Ihrem Benutzerverzeichnis und startet die Anwendung neu. " +
-                "Danach werden die Standard‑Einstellungen geladen. Verwenden Sie diese Funktion nur, wenn Sie sicher sind, dass " +
-                "Ihre benutzerdefinierten Einstellungen verloren gehen dürfen.";
+        final String infoText = GuiConstants.TROUBLESHOOT_INFO;
 
         final JTextArea infoArea = new JTextArea(infoText);
         infoArea.setLineWrap(true);
@@ -181,11 +178,11 @@ public final class ExtractionSettingsDialog extends JDialog {
 
         panel.add(infoArea, BorderLayout.CENTER);
 
-        final JButton resetButton = new JButton("Einstellungen zurücksetzen und neu starten");
+        final JButton resetButton = new JButton(GuiConstants.BUTTON_RESET_AND_RESTART);
         resetButton.addActionListener(actionEvent -> {
             final int confirm = JOptionPane.showConfirmDialog(this,
-                    "Möchten Sie die Einstellungen wirklich löschen und die Anwendung neu starten?",
-                    "Einstellungen zurücksetzen",
+                    GuiConstants.CONFIRM_RESET_MESSAGE,
+                    GuiConstants.CONFIRM_RESET_TITLE,
                     JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
 
             if (confirm == JOptionPane.OK_OPTION) {
@@ -199,19 +196,19 @@ public final class ExtractionSettingsDialog extends JDialog {
                     }
 
                     if (deleted) {
-                        JOptionPane.showMessageDialog(this, "Einstellungen wurden gelöscht. Die Anwendung wird nun neu gestartet.", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_SETTINGS_DELETED, GuiConstants.MSG_ERROR_TITLE, JOptionPane.INFORMATION_MESSAGE);
                     } else {
-                        JOptionPane.showMessageDialog(this, "Die Einstellungsdatei wurde nicht gefunden oder konnte nicht gelöscht werden. Es wird trotzdem versucht, die Anwendung neu zu starten.", "Hinweis", JOptionPane.INFORMATION_MESSAGE);
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_SETTINGS_NOT_FOUND, GuiConstants.MSG_ERROR_TITLE, JOptionPane.INFORMATION_MESSAGE);
                     }
 
                     // Attempt to restart
                     try {
                         restartApplication();
                     } catch (final Exception ex) {
-                        JOptionPane.showMessageDialog(this, "Neustart fehlgeschlagen: " + ex.getMessage() + "\nBitte starten Sie die Anwendung manuell neu.", "Fehler", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog(this, GuiConstants.MSG_RESTART_FAILED + ex.getMessage() + "\nPlease restart the application manually.", GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
                     }
                 } catch (final Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Fehler beim Zurücksetzen der Einstellungen: " + ex.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, GuiConstants.MSG_RESET_ERROR + ex.getMessage(), GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
