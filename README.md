@@ -73,3 +73,22 @@ Search results appear in a sortable table. You can:
 * Open file locations
 * Copy paths to clipboard
 * Extract selected files (if enabled)
+  Just download the latest jar:
+
+<table style="width:100%">
+  <tr>
+    <th>Version</th>
+    <th>Download</th>
+    <th>Release Type</th>
+  </tr>
+ <tr>
+    <td>v1.0.1</td>
+    <td><a href="jar/SearchMax-1.0.1.jar">SearchMax v1.0.1</a></td>
+    <td>Stable</td>
+  </tr>
+ <tr>
+    <td>v1.0.0</td>
+    <td><a href="jar/SearchMax-1.0.0.jar">SearchMax v1.0.0</a></td>
+    <td>Stable</td>
+  </tr>
+</table>
