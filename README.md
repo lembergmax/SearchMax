@@ -75,6 +75,11 @@ Search results appear in a sortable table. You can:
 * Extract selected files (if enabled)
   Just download the latest jar:
 
+
+### Download
+
+Requires Java 21 or higher.
+
 <table style="width:100%">
   <tr>
     <th>Version</th>
