@@ -27,7 +27,6 @@ efficient workflow.
 * Extension allow/deny lists for targeted or restricted searches.
 * Cancellable and non-blocking search process with live progress updates.
 * Results table with batch operations (open folder, copy path, export selected files).
-* Built-in log viewer for errors, permission issues, and diagnostic details.
 
 ---
 
@@ -44,9 +43,6 @@ efficient workflow.
 
 * Extraction settings dialog
   <img src="screenshots/extraction_settings.png" alt="Extraction settings dialog" />
-
-* Log viewer
-  <img src="screenshots/log_viewer.png" alt="Log viewer" />
 
 ---
 
@@ -77,7 +73,3 @@ Search results appear in a sortable table. You can:
 * Open file locations
 * Copy paths to clipboard
 * Extract selected files (if enabled)
-
-### Logging & Diagnostics
-
-The log viewer provides informational messages, warnings, errors, and access issues encountered during the search.

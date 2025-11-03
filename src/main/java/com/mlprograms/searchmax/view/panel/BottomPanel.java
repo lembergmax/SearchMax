@@ -18,7 +18,6 @@ public final class BottomPanel extends JPanel {
     private final JLabel statusLabel = new JLabel(GuiConstants.STATUS_READY);
     private final JProgressBar progressBar = new JProgressBar();
     private final JCheckBox performanceModeCheckbox = new JCheckBox(GuiConstants.PERFORMANCE_MODE);
-    private final JButton showLogsButton = new JButton(GuiConstants.BUTTON_LOGS);
     private final JButton showSettingsButton = new JButton(GuiConstants.BUTTON_SETTINGS);
 
     public BottomPanel(final SearchView parentView) {
@@ -54,7 +53,6 @@ public final class BottomPanel extends JPanel {
     private JPanel createControlPanel() {
         final JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         panel.add(performanceModeCheckbox);
-        panel.add(showLogsButton);
         panel.add(showSettingsButton);
         panel.add(progressBar);
         return panel;
@@ -67,21 +65,7 @@ public final class BottomPanel extends JPanel {
     }
 
     private void initializeEventListeners(final SearchView parentView) {
-        initializeShowLogsButtonListener(parentView);
         initializeShowSettingsButtonListener(parentView);
-    }
-
-    private void initializeShowLogsButtonListener(final SearchView parentView) {
-        showLogsButton.addActionListener(actionEvent -> {
-            try {
-                parentView.onShowLogs();
-            } catch (final Exception exception) {
-                showErrorMessage(
-                        GuiConstants.MSG_ERROR_OPEN_LOGS_PREFIX + exception.getMessage(),
-                        GuiConstants.MSG_ERROR_TITLE
-                );
-            }
-        });
     }
 
     private void initializeShowSettingsButtonListener(final SearchView parentView) {
