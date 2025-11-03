@@ -1,39 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN" packages="com.mlprograms.searchmax.view.logging">
+<Configuration status="WARN">
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
             <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
         </Console>
 
-        <!-- In-memory appender zum Anzeigen in der UI -->
-        <InMemoryLogAppender name="InMemory">
-            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
-        </InMemoryLogAppender>
     </Appenders>
 
     <Loggers>
         <!-- Root-Logger -->
         <Root level="info">
             <AppenderRef ref="Console"/>
-            <AppenderRef ref="InMemory"/>
         </Root>
 
         <!-- Application logging: normalerweise INFO (set to DEBUG only for troubleshooting) -->
         <Logger name="com.mlprograms.searchmax" level="info" additivity="false">
             <AppenderRef ref="Console"/>
-            <AppenderRef ref="InMemory"/>
         </Logger>
 
         <!-- Setze verbose Bibliotheken auf WARN, z.B. PDFBox internals -->
         <Logger name="org.apache.pdfbox" level="warn" additivity="false">
             <AppenderRef ref="Console"/>
-            <AppenderRef ref="InMemory"/>
         </Logger>
 
         <!-- Swing/AWT/Java internal logging auf WARN, falls benötigt -->
         <Logger name="java.awt" level="warn" additivity="false">
             <AppenderRef ref="Console"/>
-            <AppenderRef ref="InMemory"/>
         </Logger>
 
     </Loggers>

@@ -16,10 +16,8 @@ public final class GuiConstants {
     public static final String SEARCH_BUTTON = "Search";
     public static final String CANCEL_BUTTON = "Cancel";
     public static final String MANAGE_FILTERS = "Manage filters";
-    public static final String BUTTON_LOGS = "Logs";
     public static final String LABEL_FOLDER = "Folder";
     public static final String LABEL_SEARCHTEXT = "Filename";
-    public static final String FILES_FOUND = "File(s) found";
 
     // SearchView / JFileChooser / JOptionPane messages
     public static final String CHOOSER_SELECT_FOLDER = "Select folder";
@@ -50,7 +48,6 @@ public final class GuiConstants {
     public static final String EXT_PANEL_TITLE = "File type";
     public static final String INPUT_NEW_EXTENSION = "New file type (e.g. .txt):";
     public static final String MSG_EXTENSION_EXISTS = "Extension already exists.";
-    public static final String MSG_EXTENSION_CONFLICT = "Extension cannot be both Allow and Exclude.";
     public static final String MSG_ERROR_TITLE = "Error";
 
     public static final String BUTTON_OK = "OK";
@@ -104,10 +101,7 @@ public final class GuiConstants {
     public static final String MSG_RESET_ERROR = "Error while resetting settings: ";
 
     // Log / Error messages
-    public static final String MSG_INMEMORY_APPENDER_NOT_FOUND = "InMemory Log Appender not found. Please check the log4j2 configuration.";
-    public static final String MSG_ERROR_OPEN_LOGVIEWER_PREFIX = "Error opening the log viewer: ";
     public static final String MSG_ERROR_OPEN_SETTINGS_PREFIX = "Error opening the settings: ";
-    public static final String MSG_ERROR_OPEN_LOGS_PREFIX = "Error opening the logs: ";
 
     // CenterPanel messages
     public static final String MSG_FILE_NOT_FOUND_PREFIX = "File does not exist: ";

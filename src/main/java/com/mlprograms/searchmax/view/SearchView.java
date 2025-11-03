@@ -4,16 +4,12 @@ import com.mlprograms.searchmax.ExtractionMode;
 import com.mlprograms.searchmax.controller.SearchController;
 import com.mlprograms.searchmax.model.SearchModel;
 import com.mlprograms.searchmax.model.TimeRangeTableModel;
-import com.mlprograms.searchmax.view.logging.InMemoryLogAppender;
 import com.mlprograms.searchmax.view.panel.BottomPanel;
 import com.mlprograms.searchmax.view.panel.CenterPanel;
 import com.mlprograms.searchmax.view.panel.DrivePanel;
 import com.mlprograms.searchmax.view.panel.TopPanel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.logging.log4j.core.Appender;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.config.Configuration;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -110,7 +106,6 @@ public final class SearchView extends JFrame {
     private final BottomPanel bottomPanel;
     private final StatusUpdater statusUpdater;
 
-    private LogViewer logViewer = null;
     private boolean isSearchRunning = false;
 
     // Filter-Zustände
@@ -267,39 +262,6 @@ public final class SearchView extends JFrame {
                 topPanel.getFolderPathTextField().setText(selectedDirectory.getAbsolutePath());
                 saveApplicationSettings();
             }
-        }
-    }
-
-    public void onShowLogs() {
-        try {
-            if (logViewer != null) {
-                logViewer.toFront();
-                logViewer.requestFocus();
-                return;
-            }
-
-            final LoggerContext loggerContext =
-                    LoggerContext.getContext(false);
-            final Configuration configuration = loggerContext.getConfiguration();
-            final Appender appender = configuration.getAppender("InMemory");
-
-            if (appender instanceof InMemoryLogAppender inMemoryLogAppender) {
-                logViewer = new LogViewer(inMemoryLogAppender);
-                logViewer.setVisible(true);
-                logViewer.addWindowListener(new java.awt.event.WindowAdapter() {
-                    @Override
-                    public void windowClosed(final java.awt.event.WindowEvent windowEvent) {
-                        logViewer = null;
-                    }
-                });
-            } else {
-                JOptionPane.showMessageDialog(this, GuiConstants.MSG_INMEMORY_APPENDER_NOT_FOUND,
-                        GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
-            }
-        } catch (final Exception exception) {
-            log.warn("Fehler beim Öffnen des Log-Viewers", exception);
-            JOptionPane.showMessageDialog(this, GuiConstants.MSG_ERROR_OPEN_LOGVIEWER_PREFIX + exception.getMessage(),
-                    GuiConstants.MSG_ERROR_TITLE, JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -812,3 +774,4 @@ public final class SearchView extends JFrame {
     }
 
 }
+
